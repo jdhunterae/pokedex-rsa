@@ -45,16 +45,16 @@ Each phase branch cuts from `develop`, gets merged back into `develop` when comp
 
 The foundation everything else depends on. No other phase begins until this is stable and tested.
 
-- [ ] `pokedex_rsa/models/pokemon.py`
+- [x] `pokedex_rsa/models/pokemon.py`
   - Pokemon dataclass
   - DB connection and access methods
   - CRUD helpers for querying by field values
-- [ ] `pokedex_rsa/models/resolver.py`
+- [x] `pokedex_rsa/models/resolver.py`
   - Accepts a metadata bundle (dict of field/value pairs)
   - Queries the database for matching Pokemon
   - Returns exactly one match, or raises on zero or multiple matches
-- [ ] `tests/test_pokemon.py`
-- [ ] `tests/test_resolver.py`
+- [x] `tests/test_pokemon.py`
+- [x] `tests/test_resolver.py`
 
 ---
 
@@ -64,14 +64,16 @@ The foundation everything else depends on. No other phase begins until this is s
 
 The core of the project. Depends on Phase 1 — uses the resolver to derive primes from Pokemon names.
 
-- [ ] `pokedex_rsa/models/crypto.py`
-  - Name hashing → deterministic prime derivation
-  - RSA key generation (`n`, `e`, `d`) from two derived primes
-  - `encrypt(message, public_key)`
-  - `decrypt(ciphertext, private_key)`
-- [ ] `tests/test_crypto.py`
-  - Verify math with known values
-  - Round-trip encrypt/decrypt assertions
+- [x] `pokedex_rsa/models/crypto.py`
+  - SHA-256 name hashing → deterministic prime derivation via Miller-Rabin prime search
+  - RSA key generation (`n`, `e=65537`, `d`) from two derived primes
+  - Block-based `encrypt(message, public_key)` — arbitrary message length
+  - Block-based `decrypt(ciphertext, private_key, public_key)`
+- [x] `tests/test_crypto.py`
+  - Primality helpers (Miller-Rabin, next_prime)
+  - Prime derivation (determinism, uniqueness, bit-range)
+  - RSA math (modular inverse, keypair invariants)
+  - Round-trip encrypt/decrypt across short, long, unicode, and variant-Pokemon messages
 
 ---
 

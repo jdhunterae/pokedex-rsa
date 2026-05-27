@@ -154,14 +154,108 @@ pokedex-rsa/
 
 ## How It Works
 
-*Full documentation coming as the project develops.*
+### Overview
 
-The core idea:
+Pokedex RSA is a demonstration of RSA encryption principles where Pokémon metadata serves as the public key exchange mechanism. The two core ideas are:
 
-1. **Key generation** — a Pokémon's name is hashed to derive a large prime *p*. A second Pokémon provides prime *q*. Together they form the RSA modulus *n = p × q*.
-2. **Public key exchange** — instead of sharing *p* and *q* directly, the sender shares a metadata bundle (e.g. `{type: grass/poison, height: 2.0, color: green}`) that uniquely identifies each Pokémon in the local database.
-3. **Resolution** — the recipient queries their local database with the metadata bundle. If exactly one Pokémon matches, the prime is derived and the message can be decrypted. Ambiguous queries (multiple matches) are rejected.
-4. **Encryption / decryption** — standard RSA math on top of the derived primes.
+1. A Pokémon's name can be deterministically hashed into a large prime number
+2. Instead of sharing that prime directly, the sender shares a *metadata puzzle* — a set of attributes that uniquely identifies the Pokémon in the local database
+
+The recipient solves the puzzle, recovers the name, re-derives the prime, and uses it to decrypt the message.
+
+---
+
+### Prime Derivation
+
+The foundation of the system is a deterministic, collision-resistant mapping from Pokémon name to prime number.
+
+**Why not just use the Pokédex number?**
+Mapping `#0001 → 2nd prime`, `#0002 → 3rd prime`, etc. produces collisions for regional variants — Kantonian and Hisuian Typhlosion both share Pokédex number 0157, so they would derive the same prime. This breaks the uniqueness guarantee the cryptosystem depends on.
+
+**The solution: SHA-256 name hashing**
+
+Each Pokémon's PokeAPI slug (e.g. `typhlosion`, `typhlosion-hisui`) is UTF-8 encoded and passed through SHA-256, producing a unique 256-bit integer. That integer becomes the starting point for a prime search:
+
+```
+hash   = SHA-256("typhlosion-hisui")  →  256-bit integer H
+prime  = next_prime(H)                →  first prime ≥ H
+```
+
+The forward walk to the next prime uses the Miller-Rabin probabilistic primality test (20 rounds), which provides a false-positive probability of less than 4⁻²⁰ ≈ 10⁻¹² per candidate — sufficient for this application.
+
+**Why this guarantees uniqueness**
+
+SHA-256 is collision-resistant by design: finding two inputs that produce the same hash is computationally infeasible. Two different Pokémon names therefore produce starting points separated by an astronomically large distance on the number line. The average gap between 256-bit primes is approximately 177 numbers (by the prime number theorem), so each name's prime search terminates within a small local neighbourhood that cannot overlap with any other name's neighbourhood.
+
+**Key size**
+
+Derived primes are approximately 256 bits. The RSA modulus `n = p × q` is therefore approximately 512 bits. 512-bit RSA is not considered secure by modern standards — it has been practically factored since 1999. This is an intentional and documented limitation: the prime pool is bounded by the size of the Pokédex, and this project demonstrates RSA principles rather than providing a production cryptosystem. The architecture and mathematics are sound; only the key size falls short of modern security requirements.
+
+---
+
+### Key Generation
+
+Two distinct Pokémon provide the two primes:
+
+```
+p = derive_prime("bulbasaur")
+q = derive_prime("charmander")
+n = p × q                          # RSA modulus (~512 bits)
+φ(n) = (p-1)(q-1)                  # Euler's totient
+e = 65537                          # public exponent (Fermat prime F₄)
+d = e⁻¹ mod φ(n)                   # private exponent (modular inverse)
+```
+
+The public exponent `65537` (2¹⁶ + 1) is the standard choice in RSA implementations. It is a Fermat prime, which means it has a short binary representation (exactly two 1-bits), making modular exponentiation fast. It is also large enough to resist small-exponent attacks that affect values like `e=3`.
+
+---
+
+### Public Key Exchange
+
+The sender does not share the prime numbers or the Pokémon names. Instead, they share a **metadata bundle** — a set of Pokémon attributes that uniquely identifies each Pokémon in the local database:
+
+```json
+{
+  "pokemon_p": { "type_primary": "grass", "type_secondary": "poison", "color": "green" },
+  "pokemon_q": { "type_primary": "fire",  "generation": 1,           "height": 0.6    }
+}
+```
+
+The bundle is valid only if each sub-query resolves to exactly one Pokémon. The sender can use any combination of the stored fields — type, height, weight, base stat total, generation, color, form — and is responsible for choosing a combination that is unambiguous. The tool validates uniqueness before accepting a bundle.
+
+**Non-determinism by design**
+
+The same Pokémon can be described by many different valid metadata bundles. Bulbasaur could be identified by `{type_primary: grass, type_secondary: poison}` one time, or by `{color: green, generation: 1, type_secondary: poison}` another time. This means the public key for the same underlying keypair is never identical across sessions, which is a desirable property.
+
+**Resolution**
+
+The recipient queries their local database with each sub-bundle. The resolver enforces strict uniqueness: zero matches or multiple matches both result in an error. Only an exact single match allows decryption to proceed. Both parties must be using a database seeded from the same source (PokeAPI) for resolution to succeed.
+
+---
+
+### Encryption and Decryption
+
+RSA encrypts integers smaller than the modulus `n`. To handle messages of arbitrary length, the plaintext is split into fixed-size byte blocks sized to fit within `n`, and each block is encrypted independently:
+
+```
+block_size = (n.bit_length() // 8) - 1   # safely below n
+
+for each block:
+    m = bytes_to_int(block)
+    c = m^e mod n                          # encrypt
+```
+
+Decryption reverses the process:
+
+```
+for each ciphertext integer c:
+    m = c^d mod n                          # decrypt
+    block = int_to_bytes(m)
+
+plaintext = join(all blocks)
+```
+
+Block-based encryption means there is no practical message length limit, and the block size scales automatically as the Pokédex grows and primes become larger in future generations.
 
 ---
 
