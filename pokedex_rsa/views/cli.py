@@ -420,7 +420,11 @@ def validate(bundle):
     """
     b = _parse_bundle(bundle, "--bundle")
     controller = _controller()
-    ok, err, pokemon = controller.validate_bundle(b)
+
+    try:
+        ok, err, pokemon = controller.validate_bundle(b)
+    except ValueError as e:
+        _err(str(e))
 
     if ok:
         _ok(f"Bundle resolves to: {pokemon}")
