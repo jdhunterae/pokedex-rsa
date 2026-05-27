@@ -4,7 +4,7 @@
 
 ```
 main                  # stable, working code only
-└── dev               # integration branch, merges into main per phase
+└── develop           # integration branch, merges into main per phase
     ├── phase/1-data-layer
     ├── phase/2-crypto
     ├── phase/3-controller
@@ -12,11 +12,11 @@ main                  # stable, working code only
     └── phase/5-polish
 ```
 
-Each phase branch cuts from `dev`, gets merged back into `dev` when complete.
-`dev` merges into `main` at the end of each phase once verified stable.
+Each phase branch cuts from `develop`, gets merged back into `develop` when complete.
+`develop` merges into `main` at the end of each phase once verified stable.
 `main` always represents a working, if incomplete, state of the project.
 
-> The seeder script and project scaffolding (setup.sh, .gitignore, README, requirements.txt) are committed directly to `main` before cutting `dev`, as they are setup infrastructure rather than application code.
+> The seeder script and project scaffolding (setup.sh, .gitignore, README, requirements.txt) are committed directly to `main` before cutting `develop`, as they are setup infrastructure rather than application code.
 
 ---
 
@@ -41,7 +41,7 @@ Each phase branch cuts from `dev`, gets merged back into `dev` when complete.
 
 ### Phase 1 — Data Layer
 >
-> Branch: `phase/1-data-layer` → merge into `dev`
+> Branch: `phase/1-data-layer` → merge into `develop`
 
 The foundation everything else depends on. No other phase begins until this is stable and tested.
 
@@ -60,7 +60,7 @@ The foundation everything else depends on. No other phase begins until this is s
 
 ### Phase 2 — Crypto Layer
 >
-> Branch: `phase/2-crypto` → merge into `dev`
+> Branch: `phase/2-crypto` → merge into `develop`
 
 The core of the project. Depends on Phase 1 — uses the resolver to derive primes from Pokemon names.
 
@@ -77,7 +77,7 @@ The core of the project. Depends on Phase 1 — uses the resolver to derive prim
 
 ### Phase 3 — Controller
 >
-> Branch: `phase/3-controller` → merge into `dev`
+> Branch: `phase/3-controller` → merge into `develop`
 
 Wires the data and crypto layers into a coherent workflow. Handles error states from the resolver gracefully.
 
@@ -93,7 +93,7 @@ Wires the data and crypto layers into a coherent workflow. Handles error states 
 
 ### Phase 4 — CLI
 >
-> Branch: `phase/4-cli` → merge into `dev`
+> Branch: `phase/4-cli` → merge into `develop`
 
 The user-facing surface. Depends on the controller being stable.
 
@@ -108,7 +108,7 @@ The user-facing surface. Depends on the controller being stable.
 
 ### Phase 5 — Polish
 >
-> Branch: `phase/5-polish` → merge into `dev` → merge into `main`
+> Branch: `phase/5-polish` → merge into `develop` → merge into `main`
 
 - [ ] Flesh out README with full usage examples and real terminal output
 - [ ] Docstrings across all modules
