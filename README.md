@@ -8,9 +8,45 @@ A proof-of-concept RSA encryption tool that uses Pokémon metadata as the public
 
 ## Setup
 
+### 1. Clone the repository
+
 ```bash
-pip install -r requirements.txt
-touch data/.gitkeep
+git clone https://github.com/your-username/pokedex-rsa.git
+cd pokedex-rsa
+```
+
+### 2. Run the environment setup script
+
+The setup script handles everything in one step: creates a Python virtual environment if one doesn't exist, activates it in your current shell, and installs all dependencies from `requirements.txt`. It also creates the `data/` directory if it's missing.
+
+```bash
+source setup.sh
+```
+
+> ⚠️ The script must be run with `source`, not `bash setup.sh`. Using `source` ensures the virtual environment activation persists in your current terminal session. Running it directly as a script would activate the venv inside a subprocess and lose it immediately on exit.
+
+### 3. Seed the local database
+
+The tool runs entirely offline after the initial seed. Run the seeder once to populate the local SQLite database from [PokeAPI](https://pokeapi.co). The starters option is recommended as a starting point:
+
+```bash
+python scripts/seed_db.py --starters
+```
+
+See the [Database Seeder](#database-seeder) section below for the full list of seeding options.
+
+### Returning to the project later
+
+The setup script is safe to re-run at any time. If the virtual environment already exists it will skip creation and go straight to activation and dependency installation. Just `source` it again at the start of each session:
+
+```bash
+source setup.sh
+```
+
+Or activate the venv manually if you prefer:
+
+```bash
+source .venv/bin/activate
 ```
 
 ---
