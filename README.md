@@ -261,6 +261,131 @@ Block-based encryption means there is no practical message length limit, and the
 
 ---
 
+## Usage
+
+### Installation
+
+After running `source setup.sh`, install the CLI entry point:
+
+```bash
+pip install -e .
+```
+
+This registers `poke-rsa` as a command in your virtual environment.
+
+---
+
+### Commands
+
+#### `validate` — check a metadata bundle
+
+Before building a keypair, use `validate` to confirm your metadata uniquely identifies a single Pokémon. The tool will tell you exactly which Pokémon matches — or, if the bundle is ambiguous, suggest which fields to add to narrow it down.
+
+```bash
+poke-rsa validate --bundle '{"type_primary":"grass","base_stat_total":308}'
+# ✓ Bundle resolves to: #0495 Snivy (grass, Gen 5, 0.6m, 8.1kg, BST 308)
+```
+
+> **Note:** Bundles that seem obvious can still be ambiguous depending on which Pokémon are in your database. For example, `{"type_primary":"grass","type_secondary":"poison"}` matches Bulbasaur, Ivysaur, and Venusaur when the starter lines are seeded. Always validate before running `keygen`.
+
+---
+
+#### `keygen` — generate a keypair
+
+**File mode (default)** — writes `private.key` and `public.json` to the current directory:
+
+```bash
+poke-rsa keygen \
+  --bundle-p '{"type_primary":"grass","base_stat_total":308}' \
+  --bundle-q '{"type_primary":"fire","generation":1,"type_secondary":"flying"}'
+
+# Generating keypair from Snivy × Charizard...
+#
+# ✓ Private key → private.key
+# ✓ Public key  → public.json
+#
+# Key Summary
+#   Pokemon P: #0495 Snivy (grass, Gen 5, 0.6m, 8.1kg, BST 308)
+#   Pokemon Q: #0006 Charizard (fire/flying, Gen 1, 1.7m, 90.5kg, BST 534)
+#   Modulus size: 510 bits
+```
+
+**`--verbose`** — writes files and also prints key content to terminal:
+
+```bash
+poke-rsa keygen --verbose \
+  --bundle-p '{"type_primary":"grass","base_stat_total":308}' \
+  --bundle-q '{"type_primary":"fire","generation":1,"type_secondary":"flying"}'
+```
+
+**`--fileless`** — prints keys to terminal only, no files written. Output is directly pasteable as input to the next command:
+
+```bash
+poke-rsa keygen --fileless \
+  --bundle-p '{"type_primary":"grass","base_stat_total":308}' \
+  --bundle-q '{"type_primary":"fire","generation":1,"type_secondary":"flying"}'
+
+# Private Key (keep secret)
+#   {"n": 2882122...953657, "d": 455733...750077}
+#
+# Public Key (share with recipient)
+#   {"bundle_p": {"type_primary": "grass", "base_stat_total": 308}, "bundle_q": {"type_primary": "fire", "generation": 1, "type_secondary": "flying"}, "e": 65537}
+```
+
+---
+
+#### `encrypt` — encrypt a message
+
+**File mode** — reads `public.json`, writes `encrypted.json`:
+
+```bash
+poke-rsa encrypt --message "Hello, Trainer!"
+
+# ✓ Encrypted message → encrypted.json
+```
+
+**Fileless** — paste the public key output from `keygen --fileless`:
+
+```bash
+poke-rsa encrypt --fileless \
+  --message "Hello, Trainer!" \
+  --public-key '{"bundle_p":{...},"bundle_q":{...},"e":65537}'
+```
+
+---
+
+#### `decrypt` — decrypt a message
+
+**File mode** — reads `private.key` and `encrypted.json`, writes `plaintext.txt`:
+
+```bash
+poke-rsa decrypt
+
+# ✓ Decrypted: "Hello, Trainer!"
+```
+
+**Fileless** — paste private key and encrypted message from previous outputs:
+
+```bash
+poke-rsa decrypt --fileless \
+  --private-key '{"n":5232...,"d":5115...}' \
+  --encrypted '{"ciphertext":[...],"public_bundle":{...}}'
+```
+
+---
+
+### Output modes summary
+
+| Flag | Files written | Terminal output |
+|---|---|---|
+| *(default)* | ✓ | Brief confirmation only |
+| `--verbose` | ✓ | Full key / message content |
+| `--fileless` | ✗ | Full key / message content |
+
+> `--verbose` and `--fileless` are mutually exclusive.
+
+---
+
 ## Acknowledgements
 
 Pokémon data provided by [PokeAPI](https://pokeapi.co). Pokémon and all related names are trademarks of Nintendo / Game Freak.

@@ -39,7 +39,7 @@ Each phase branch cuts from `develop`, gets merged back into `develop` when comp
 
 ---
 
-### Phase 1 — Data Layer
+### Phase 1 — Data Layer `[complete]`
 >
 > Branch: `phase/1-data-layer` → merge into `develop`
 
@@ -58,7 +58,7 @@ The foundation everything else depends on. No other phase begins until this is s
 
 ---
 
-### Phase 2 — Crypto Layer
+### Phase 2 — Crypto Layer `[complete]`
 >
 > Branch: `phase/2-crypto` → merge into `develop`
 
@@ -77,7 +77,7 @@ The core of the project. Depends on Phase 1 — uses the resolver to derive prim
 
 ---
 
-### Phase 3 — Controller
+### Phase 3 — Controller `[complete]`
 >
 > Branch: `phase/3-controller` → merge into `develop`
 
@@ -93,18 +93,21 @@ Wires the data and crypto layers into a coherent workflow. Handles error states 
 
 ---
 
-### Phase 4 — CLI
+### Phase 4 — CLI `[complete]`
 >
 > Branch: `phase/4-cli` → merge into `develop`
 
 The user-facing surface. Depends on the controller being stable.
 
-- [ ] `pokedex_rsa/views/cli.py`
-  - `keygen` command — generates and displays keypair with metadata public key
-  - `encrypt` command — accepts message and public key bundle, outputs ciphertext
-  - `decrypt` command — accepts ciphertext and private key, outputs plaintext
-- [ ] Manual smoke tests
-- [ ] Demo terminal output for README
+- [x] `pokedex_rsa/views/cli.py`
+  - `keygen` — file mode, `--verbose`, and `--fileless` output modes
+  - `encrypt` — reads public key from file or inline JSON
+  - `decrypt` — reads private key and ciphertext from files or inline JSON
+  - `validate` — utility command to test metadata bundles before keygen
+- [x] `setup.py` — registers `poke-rsa` CLI entry point
+- [x] `requirements.txt` — updated with `click>=8.0.0`
+- [x] Smoke tested: fileless pipeline, file pipeline, verbose mode
+- [x] Usage section added to README with terminal output examples
 
 ---
 
@@ -118,8 +121,6 @@ The user-facing surface. Depends on the controller being stable.
 - [ ] Update ROADMAP to reflect completed state
 - [ ] Stretch goals (if pursuing):
   - [ ] Intentional ambiguity feature — metadata that resolves to multiple Pokemon, requiring an out-of-band hint
-  - [ ] `--verbose` flag for CLI showing resolution and crypto steps
-  - [ ] Export keypair to file
 
 ---
 
@@ -128,7 +129,5 @@ The user-facing surface. Depends on the controller being stable.
 Ideas to revisit after Phase 5, if the project warrants it.
 
 - **Intentional ambiguity** — allow a sender to craft a public key that matches multiple Pokemon, requiring a shared secret hint to narrow down. Adds a second layer on top of the metadata resolution.
-- **Verbose mode** — a `--verbose` CLI flag that walks through each step of the resolution and encryption process, useful for demonstration purposes.
-- **Keypair export** — save generated keypairs to a local file for reuse across sessions.
 - **Web UI** — a simple Flask or FastAPI front end wrapping the controller, making the tool more accessible as a demo.
 - **P2P messaging** — a minimal peer-to-peer messaging layer using the encryption engine, the originally considered scope for the project.
