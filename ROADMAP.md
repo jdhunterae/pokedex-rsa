@@ -83,12 +83,12 @@ The core of the project. Depends on Phase 1 — uses the resolver to derive prim
 
 Wires the data and crypto layers into a coherent workflow. Handles error states from the resolver gracefully.
 
-- [ ] `pokedex_rsa/controllers/encryption_controller.py`
+- [x] `pokedex_rsa/controllers/encryption_controller.py`
   - `generate_keypair()` — selects two Pokemon, derives primes, returns keypair + metadata bundles as public key
   - `encrypt(message, public_key_bundle)`
   - `decrypt(ciphertext, private_key, public_key_bundle)`
   - Error handling for ambiguous or unresolvable metadata queries
-- [ ] `tests/test_encryption_controller.py`
+- [x] `tests/test_encryption_controller.py`
   - Full pipeline end-to-end tests
 
 ---
