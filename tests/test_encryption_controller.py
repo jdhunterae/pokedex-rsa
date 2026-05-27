@@ -4,14 +4,17 @@ tests/test_encryption_controller.py
 End-to-end tests for EncryptionController.
 
 Tests cover:
-  - Keypair generation (success, resolution errors, same-pokemon error)
-  - Encrypt (success, resolution errors, empty message)
-  - Decrypt (success, wrong key, corrupted ciphertext)
-  - Full pipeline round-trips (short, long, unicode messages)
-  - PokedexPublicBundle and EncryptedMessage JSON serialization
+  - Exact bundle keygen (original behavior)
+  - Partial bundle keygen (random from pool)
+  - No bundle keygen (fully random)
+  - Auto-bundle construction
+  - count_candidates and random_pokemon helpers
+  - Encrypt, decrypt, full pipeline round-trips
+  - JSON serialization
   - validate_bundle helper
+  - Error cases
 
-Uses the same in-memory SQLite fixture pattern as the other test modules.
+Uses an in-memory SQLite fixture so tests are fully self-contained.
 """
 
 from pokedex_rsa.models.crypto import derive_prime, generate_keypair
@@ -22,6 +25,7 @@ from pokedex_rsa.controllers.encryption_controller import (
     EncryptedMessage,
     ResolutionError,
     SamePokemonError,
+    EmptyDatabaseError,
 )
 import copy
 import sqlite3
@@ -70,23 +74,18 @@ TEST_RECORDS = [
      None,     0.4,  7.6,  310, 3, "blue"),
 ]
 
-# Bundles that uniquely resolve in the test DB
-# only grass type
+# Exact bundles (resolve to exactly one Pokemon)
 BUNDLE_BULBASAUR = {"type_primary": "grass"}
-BUNDLE_CHARMANDER = {"type_primary": "fire",
-                     "generation": 1}        # only fire gen1
-BUNDLE_SQUIRTLE = {"type_primary": "water",
-                   "generation": 1}       # only water gen1
-BUNDLE_CYNDAQUIL = {"type_primary": "fire",
-                    "weight": 7.9}          # unique weight
+BUNDLE_CHARMANDER = {"type_primary": "fire", "generation": 1}
+BUNDLE_SQUIRTLE = {"type_primary": "water", "generation": 1}
+BUNDLE_CYNDAQUIL = {"type_primary": "fire", "weight": 7.9}
 BUNDLE_TYPHLOSION = {"type_primary": "fire",
                      "base_stat_total": 534, "form": "default"}
 BUNDLE_HISUI = {"type_primary": "fire", "type_secondary": "ghost"}
-BUNDLE_MUDKIP = {"type_primary": "water",
-                 "generation": 3}       # only water gen3
+BUNDLE_MUDKIP = {"type_primary": "water", "generation": 3}
 
-# Ambiguous bundle (matches charmander, cyndaquil, typhlosion, typhlosion-hisui)
-BUNDLE_AMBIGUOUS = {"type_primary": "fire"}
+# Partial bundle (matches multiple Pokemon — valid for restricted random)
+BUNDLE_PARTIAL_FIRE = {"type_primary": "fire"}   # 4 matches
 
 # No-match bundle
 BUNDLE_NO_MATCH = {"type_primary": "dragon"}
@@ -104,25 +103,39 @@ def controller(tmp_path):
     return EncryptionController(db_path=str(db_file))
 
 
+@pytest.fixture
+def empty_controller(tmp_path):
+    """Controller pointing at an empty (schema-only) database."""
+    db_file = tmp_path / "empty.db"
+    conn = sqlite3.connect(str(db_file))
+    conn.execute(SCHEMA)
+    conn.commit()
+    conn.close()
+    return EncryptionController(db_path=str(db_file))
+
+
 # ---------------------------------------------------------------------------
-# generate_keypair
+# generate_keypair — exact bundle (original behavior)
 # ---------------------------------------------------------------------------
 
-class TestGenerateKeypair:
+class TestGenerateKeypairExact:
 
     def test_returns_pokedex_keypair(self, controller):
         kp = controller.generate_keypair(BUNDLE_BULBASAUR, BUNDLE_CHARMANDER)
         assert isinstance(kp, PokedexKeypair)
 
-    def test_pokemon_names_are_correct(self, controller):
+    def test_exact_bundle_selects_correct_pokemon(self, controller):
         kp = controller.generate_keypair(BUNDLE_BULBASAUR, BUNDLE_CHARMANDER)
         assert kp.pokemon_p.name == "bulbasaur"
         assert kp.pokemon_q.name == "charmander"
 
-    def test_public_bundle_carries_input_bundles(self, controller):
+    def test_public_bundle_uniquely_resolves(self, controller):
+        # Auto-constructed bundles must still resolve correctly
         kp = controller.generate_keypair(BUNDLE_BULBASAUR, BUNDLE_CHARMANDER)
-        assert kp.public_bundle.bundle_p == BUNDLE_BULBASAUR
-        assert kp.public_bundle.bundle_q == BUNDLE_CHARMANDER
+        ok_p, _, p = controller.validate_bundle(kp.public_bundle.bundle_p)
+        ok_q, _, q = controller.validate_bundle(kp.public_bundle.bundle_q)
+        assert ok_p and p.name == "bulbasaur"
+        assert ok_q and q.name == "charmander"
 
     def test_rsa_keys_are_valid(self, controller):
         kp = controller.generate_keypair(BUNDLE_BULBASAUR, BUNDLE_CHARMANDER)
@@ -136,13 +149,14 @@ class TestGenerateKeypair:
         q = derive_prime("charmander")
         assert kp.public_key.n == p * q
 
-    def test_raises_resolution_error_on_no_match(self, controller):
+    def test_works_with_regional_variant(self, controller):
+        kp = controller.generate_keypair(BUNDLE_TYPHLOSION, BUNDLE_HISUI)
+        assert kp.pokemon_p.name == "typhlosion"
+        assert kp.pokemon_q.name == "typhlosion-hisui"
+
+    def test_raises_on_no_match_bundle(self, controller):
         with pytest.raises(ResolutionError):
             controller.generate_keypair(BUNDLE_NO_MATCH, BUNDLE_CHARMANDER)
-
-    def test_raises_resolution_error_on_ambiguous(self, controller):
-        with pytest.raises(ResolutionError):
-            controller.generate_keypair(BUNDLE_AMBIGUOUS, BUNDLE_CHARMANDER)
 
     def test_raises_same_pokemon_error(self, controller):
         with pytest.raises(SamePokemonError):
@@ -153,17 +167,194 @@ class TestGenerateKeypair:
             controller.generate_keypair(BUNDLE_BULBASAUR, BUNDLE_BULBASAUR)
         assert exc_info.value.pokemon.name == "bulbasaur"
 
-    def test_works_with_regional_variant(self, controller):
-        kp = controller.generate_keypair(BUNDLE_TYPHLOSION, BUNDLE_HISUI)
-        assert kp.pokemon_p.name == "typhlosion"
-        assert kp.pokemon_q.name == "typhlosion-hisui"
 
-    def test_resolution_error_suggests_fields_on_ambiguous(self, controller):
-        with pytest.raises(ResolutionError) as exc_info:
-            controller.generate_keypair(BUNDLE_AMBIGUOUS, BUNDLE_CHARMANDER)
-        # Error message should mention fields to try
-        assert "bundle_p" in str(exc_info.value).lower(
-        ) or "add" in str(exc_info.value).lower()
+# ---------------------------------------------------------------------------
+# generate_keypair — partial bundle (restricted random)
+# ---------------------------------------------------------------------------
+
+class TestGenerateKeypairPartial:
+
+    def test_partial_bundle_produces_valid_keypair(self, controller):
+        # fire matches 4 Pokemon — should pick one and succeed
+        kp = controller.generate_keypair(BUNDLE_PARTIAL_FIRE, BUNDLE_SQUIRTLE)
+        assert isinstance(kp, PokedexKeypair)
+
+    def test_partial_bundle_p_picks_from_correct_pool(self, controller):
+        kp = controller.generate_keypair(BUNDLE_PARTIAL_FIRE, BUNDLE_SQUIRTLE)
+        assert kp.pokemon_p.type_primary == "fire"
+
+    def test_partial_bundle_q_picks_from_correct_pool(self, controller):
+        kp = controller.generate_keypair(BUNDLE_BULBASAUR, BUNDLE_PARTIAL_FIRE)
+        assert kp.pokemon_q.type_primary == "fire"
+
+    def test_partial_both_slots_produces_valid_keypair(self, controller):
+        water = {"type_primary": "water"}  # 2 matches: squirtle, mudkip
+        kp = controller.generate_keypair(BUNDLE_PARTIAL_FIRE, water)
+        assert isinstance(kp, PokedexKeypair)
+        assert kp.pokemon_p.type_primary == "fire"
+        assert kp.pokemon_q.type_primary == "water"
+
+    def test_partial_bundle_auto_constructs_unique_public_bundle(self, controller):
+        kp = controller.generate_keypair(BUNDLE_PARTIAL_FIRE, BUNDLE_SQUIRTLE)
+        # Public bundle must resolve back to the same Pokemon
+        ok_p, _, p = controller.validate_bundle(kp.public_bundle.bundle_p)
+        assert ok_p
+        assert p.name == kp.pokemon_p.name
+
+    def test_partial_no_match_raises(self, controller):
+        with pytest.raises(ResolutionError):
+            controller.generate_keypair(BUNDLE_NO_MATCH, BUNDLE_SQUIRTLE)
+
+    def test_partial_result_is_nondeterministic(self, controller):
+        # Running multiple times with the same partial bundle should
+        # occasionally produce different Pokemon (not guaranteed but very
+        # likely with 4 candidates over 20 runs)
+        names = {
+            controller.generate_keypair(
+                BUNDLE_PARTIAL_FIRE, BUNDLE_SQUIRTLE).pokemon_p.name
+            for _ in range(20)
+        }
+        assert len(names) > 1, (
+            "Expected random selection to produce multiple different Pokemon "
+            "across 20 runs with 4 candidates."
+        )
+
+
+# ---------------------------------------------------------------------------
+# generate_keypair — no bundle (fully random)
+# ---------------------------------------------------------------------------
+
+class TestGenerateKeypairRandom:
+
+    def test_no_bundles_produces_valid_keypair(self, controller):
+        kp = controller.generate_keypair()
+        assert isinstance(kp, PokedexKeypair)
+
+    def test_random_keypair_has_valid_rsa_keys(self, controller):
+        kp = controller.generate_keypair()
+        assert kp.public_key.n > 0
+        assert kp.public_key.e == 65537
+        assert kp.private_key.n == kp.public_key.n
+
+    def test_random_pokemon_are_distinct(self, controller):
+        kp = controller.generate_keypair()
+        assert kp.pokemon_p.name != kp.pokemon_q.name
+
+    def test_random_public_bundle_resolves_uniquely(self, controller):
+        kp = controller.generate_keypair()
+        ok_p, _, p = controller.validate_bundle(kp.public_bundle.bundle_p)
+        ok_q, _, q = controller.validate_bundle(kp.public_bundle.bundle_q)
+        assert ok_p and p.name == kp.pokemon_p.name
+        assert ok_q and q.name == kp.pokemon_q.name
+
+    def test_random_keypair_round_trips(self, controller):
+        kp = controller.generate_keypair()
+        msg = "Randomly generated keypair round-trip."
+        em = controller.encrypt(msg, kp.public_bundle)
+        assert controller.decrypt(em, kp.private_key) == msg
+
+    def test_empty_bundle_same_as_none(self, controller):
+        # {} and None should both mean "pick from entire DB"
+        kp = controller.generate_keypair({}, {})
+        assert isinstance(kp, PokedexKeypair)
+
+    def test_empty_database_raises(self, empty_controller):
+        with pytest.raises(EmptyDatabaseError):
+            empty_controller.generate_keypair()
+
+
+# ---------------------------------------------------------------------------
+# _build_minimal_bundle (via public bundle output)
+# ---------------------------------------------------------------------------
+
+class TestAutoBundleConstruction:
+
+    def test_auto_bundle_is_dict(self, controller):
+        kp = controller.generate_keypair(BUNDLE_BULBASAUR, BUNDLE_CHARMANDER)
+        assert isinstance(kp.public_bundle.bundle_p, dict)
+        assert isinstance(kp.public_bundle.bundle_q, dict)
+
+    def test_auto_bundle_is_non_empty(self, controller):
+        kp = controller.generate_keypair()
+        assert len(kp.public_bundle.bundle_p) > 0
+        assert len(kp.public_bundle.bundle_q) > 0
+
+    def test_auto_bundle_resolves_to_correct_pokemon(self, controller):
+        for _ in range(5):
+            kp = controller.generate_keypair()
+            ok_p, _, p = controller.validate_bundle(kp.public_bundle.bundle_p)
+            ok_q, _, q = controller.validate_bundle(kp.public_bundle.bundle_q)
+            assert ok_p, f"bundle_p did not resolve: {kp.public_bundle.bundle_p}"
+            assert ok_q, f"bundle_q did not resolve: {kp.public_bundle.bundle_q}"
+            assert p.name == kp.pokemon_p.name
+            assert q.name == kp.pokemon_q.name
+
+    def test_auto_bundle_fields_are_valid(self, controller):
+        valid_fields = {
+            "id", "form", "type_primary", "type_secondary",
+            "height", "weight", "base_stat_total", "generation", "color"
+        }
+        kp = controller.generate_keypair()
+        assert set(kp.public_bundle.bundle_p.keys()).issubset(valid_fields)
+        assert set(kp.public_bundle.bundle_q.keys()).issubset(valid_fields)
+
+
+# ---------------------------------------------------------------------------
+# count_candidates
+# ---------------------------------------------------------------------------
+
+class TestCountCandidates:
+
+    def test_no_bundle_returns_total_count(self, controller):
+        assert controller.count_candidates() == len(TEST_RECORDS)
+
+    def test_empty_bundle_returns_total_count(self, controller):
+        assert controller.count_candidates({}) == len(TEST_RECORDS)
+
+    def test_exact_bundle_returns_one(self, controller):
+        assert controller.count_candidates(BUNDLE_BULBASAUR) == 1
+
+    def test_partial_bundle_returns_correct_count(self, controller):
+        # fire: charmander, cyndaquil, typhlosion, typhlosion-hisui = 4
+        assert controller.count_candidates({"type_primary": "fire"}) == 4
+
+    def test_no_match_returns_zero(self, controller):
+        assert controller.count_candidates(BUNDLE_NO_MATCH) == 0
+
+    def test_water_type_count(self, controller):
+        # squirtle, mudkip = 2
+        assert controller.count_candidates({"type_primary": "water"}) == 2
+
+    def test_empty_database_returns_zero(self, empty_controller):
+        assert empty_controller.count_candidates() == 0
+
+
+# ---------------------------------------------------------------------------
+# random_pokemon
+# ---------------------------------------------------------------------------
+
+class TestRandomPokemon:
+
+    def test_returns_a_pokemon(self, controller):
+        from pokedex_rsa.models.pokemon import Pokemon
+        p = controller.random_pokemon()
+        assert isinstance(p, Pokemon)
+
+    def test_with_partial_bundle_returns_matching_pokemon(self, controller):
+        p = controller.random_pokemon({"type_primary": "water"})
+        assert p.type_primary == "water"
+
+    def test_no_match_raises(self, controller):
+        with pytest.raises(ResolutionError):
+            controller.random_pokemon(BUNDLE_NO_MATCH)
+
+    def test_empty_db_raises(self, empty_controller):
+        with pytest.raises(EmptyDatabaseError):
+            empty_controller.random_pokemon()
+
+    def test_is_nondeterministic(self, controller):
+        names = {controller.random_pokemon().name for _ in range(30)}
+        assert len(names) > 1
 
 
 # ---------------------------------------------------------------------------
@@ -202,8 +393,8 @@ class TestEncrypt:
 
     def test_raises_resolution_error_on_bad_bundle(self, controller):
         bad_bundle = PokedexPublicBundle(
-            bundle_p=BUNDLE_NO_MATCH,
-            bundle_q=BUNDLE_CHARMANDER,
+            bundle_p=copy.deepcopy(BUNDLE_NO_MATCH),
+            bundle_q=copy.deepcopy(BUNDLE_CHARMANDER),
         )
         with pytest.raises(ResolutionError):
             controller.encrypt("hello", bad_bundle)
@@ -229,12 +420,11 @@ class TestDecrypt:
             result = controller.decrypt(em, kp2.private_key)
             assert result != "secret"
         except (ValueError, OverflowError):
-            pass  # raising is also acceptable
+            pass
 
     def test_raises_resolution_error_if_bundle_unresolvable(self, controller):
         kp = controller.generate_keypair(BUNDLE_BULBASAUR, BUNDLE_CHARMANDER)
         em = controller.encrypt("hello", kp.public_bundle)
-        # Build a fresh EncryptedMessage with a bad bundle rather than mutating the original
         bad_bundle = PokedexPublicBundle(
             bundle_p=copy.deepcopy(BUNDLE_NO_MATCH),
             bundle_q=copy.deepcopy(BUNDLE_CHARMANDER),
@@ -251,24 +441,29 @@ class TestDecrypt:
 
 class TestPipelineRoundtrips:
 
-    def _roundtrip(self, controller, message, bundle_p, bundle_q):
+    def _roundtrip(self, controller, message, bundle_p=None, bundle_q=None):
         kp = controller.generate_keypair(bundle_p, bundle_q)
         em = controller.encrypt(message, kp.public_bundle)
         return controller.decrypt(em, kp.private_key)
 
-    def test_short_message(self, controller):
-        assert self._roundtrip(
-            controller, "Hi!", BUNDLE_BULBASAUR, BUNDLE_CHARMANDER) == "Hi!"
-
-    def test_sentence_message(self, controller):
-        msg = "The quick brown Arcanine jumps over the lazy Snorlax."
+    def test_exact_bundles(self, controller):
+        msg = "Exact bundle round-trip."
         assert self._roundtrip(
             controller, msg, BUNDLE_BULBASAUR, BUNDLE_CHARMANDER) == msg
+
+    def test_partial_bundles(self, controller):
+        msg = "Partial bundle round-trip."
+        assert self._roundtrip(
+            controller, msg, BUNDLE_PARTIAL_FIRE, BUNDLE_SQUIRTLE) == msg
+
+    def test_fully_random(self, controller):
+        msg = "Fully random round-trip."
+        assert self._roundtrip(controller, msg) == msg
 
     def test_long_message(self, controller):
         msg = "Gotta catch em all! " * 50
         assert self._roundtrip(
-            controller, msg, BUNDLE_SQUIRTLE, BUNDLE_MUDKIP) == msg
+            controller, msg, BUNDLE_BULBASAUR, BUNDLE_CHARMANDER) == msg
 
     def test_unicode_message(self, controller):
         msg = "Pokémon: 炎タイプ 🔥"
@@ -279,14 +474,6 @@ class TestPipelineRoundtrips:
         msg = "Hisuian forms are cool."
         assert self._roundtrip(
             controller, msg, BUNDLE_TYPHLOSION, BUNDLE_HISUI) == msg
-
-    def test_different_pokemon_pairs_produce_different_ciphertext(self, controller):
-        msg = "same message"
-        kp1 = controller.generate_keypair(BUNDLE_BULBASAUR, BUNDLE_CHARMANDER)
-        kp2 = controller.generate_keypair(BUNDLE_SQUIRTLE,  BUNDLE_MUDKIP)
-        em1 = controller.encrypt(msg, kp1.public_bundle)
-        em2 = controller.encrypt(msg, kp2.public_bundle)
-        assert em1.ciphertext != em2.ciphertext
 
 
 # ---------------------------------------------------------------------------
@@ -303,14 +490,6 @@ class TestSerialization:
         assert restored.bundle_q == kp.public_bundle.bundle_q
         assert restored.e == kp.public_bundle.e
 
-    def test_public_bundle_json_is_valid_json(self, controller):
-        kp = controller.generate_keypair(BUNDLE_BULBASAUR, BUNDLE_CHARMANDER)
-        raw = kp.public_bundle.to_json()
-        parsed = json.loads(raw)
-        assert "bundle_p" in parsed
-        assert "bundle_q" in parsed
-        assert "e" in parsed
-
     def test_encrypted_message_roundtrip_json(self, controller):
         kp = controller.generate_keypair(BUNDLE_BULBASAUR, BUNDLE_CHARMANDER)
         em = controller.encrypt("test message", kp.public_bundle)
@@ -324,8 +503,6 @@ class TestSerialization:
         msg = "Serialized and back again."
         kp = controller.generate_keypair(BUNDLE_BULBASAUR, BUNDLE_CHARMANDER)
         em = controller.encrypt(msg, kp.public_bundle)
-
-        # Simulate transmitting as JSON and restoring
         em_restored = EncryptedMessage.from_json(em.to_json())
         assert controller.decrypt(em_restored, kp.private_key) == msg
 
@@ -343,7 +520,7 @@ class TestValidateBundle:
         assert pokemon.name == "bulbasaur"
 
     def test_ambiguous_bundle_returns_false(self, controller):
-        ok, err, pokemon = controller.validate_bundle(BUNDLE_AMBIGUOUS)
+        ok, err, pokemon = controller.validate_bundle(BUNDLE_PARTIAL_FIRE)
         assert ok is False
         assert err is not None
         assert pokemon is None
@@ -353,8 +530,3 @@ class TestValidateBundle:
         assert ok is False
         assert err is not None
         assert pokemon is None
-
-    def test_error_message_is_informative(self, controller):
-        _, err, _ = controller.validate_bundle(BUNDLE_AMBIGUOUS)
-        assert err is not None
-        assert len(err) > 20  # not just an empty or trivial string

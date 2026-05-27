@@ -277,29 +277,88 @@ This registers `poke-rsa` as a command in your virtual environment.
 
 ### Commands
 
-#### `validate` — check a metadata bundle
+#### `count` — check how many Pokémon match a bundle
 
-Before building a keypair, use `validate` to confirm your metadata uniquely identifies a single Pokémon. The tool will tell you exactly which Pokémon matches — or, if the bundle is ambiguous, suggest which fields to add to narrow it down.
+Before generating a keypair, use `count` to understand how much a metadata
+filter restricts the key pool. With no bundle, returns the total count of all
+Pokémon in your database.
+
+```bash
+poke-rsa count
+# 1025 Pokemon in the database.
+
+poke-rsa count --bundle '{"type_primary":"fire"}'
+# 64 Pokemon match {"type_primary": "fire"} (out of 1025 total)
+
+poke-rsa count --bundle '{"type_primary":"fire","generation":1}'
+# 3 Pokemon match {"type_primary": "fire", "generation": 1} (out of 1025 total)
+```
+
+---
+
+#### `validate` — confirm a bundle resolves to exactly one Pokémon
+
+Use `validate` when you need a deterministic keypair and want to confirm your
+bundle uniquely identifies a single Pokémon before running `keygen`.
 
 ```bash
 poke-rsa validate --bundle '{"type_primary":"grass","base_stat_total":308}'
 # ✓ Bundle resolves to: #0495 Snivy (grass, Gen 5, 0.6m, 8.1kg, BST 308)
 ```
 
-> **Note:** Bundles that seem obvious can still be ambiguous depending on which Pokémon are in your database. For example, `{"type_primary":"grass","type_secondary":"poison"}` matches Bulbasaur, Ivysaur, and Venusaur when the starter lines are seeded. Always validate before running `keygen`.
+If the bundle is ambiguous, the tool tells you which fields to add:
+
+```bash
+poke-rsa validate --bundle '{"type_primary":"grass","type_secondary":"poison"}'
+# ✗ The bundle matched 3 Pokemon. Add more fields to narrow it down.
+#   Try adding: ['height', 'weight', 'base_stat_total', 'id']
+```
 
 ---
 
 #### `keygen` — generate a keypair
 
-**File mode (default)** — writes `private.key` and `public.json` to the current directory:
+Bundle flags are optional. Three modes are supported:
+
+| Mode | Description |
+|---|---|
+| No bundles | Fully random — two Pokémon chosen from the entire database |
+| Partial bundle | Restricted random — chosen from the matching pool |
+| Exact bundle | Deterministic — bundle must resolve to exactly one Pokémon |
+
+Both `--bundle-p` and `--bundle-q` can independently use any mode.
+
+**Fully random** — no bundles required:
 
 ```bash
-poke-rsa keygen \
-  --bundle-p '{"type_primary":"grass","base_stat_total":308}' \
-  --bundle-q '{"type_primary":"fire","generation":1,"type_secondary":"flying"}'
+poke-rsa keygen --fileless
 
-# Generating keypair from Snivy × Charizard...
+# Generating keypair (p: random / q: random)...
+#   Selected: Decidueye × Empoleon
+#
+# Private Key (keep secret)
+#   {"n": 3141592...,"d": 2718281...}
+#
+# Public Key (share with recipient)
+#   {"bundle_p": {"base_stat_total": 530, "weight": 36.6}, "bundle_q": {...}, "e": 65537}
+```
+
+**Restricted random** — partial bundle narrows the pool, one is picked at random:
+
+```bash
+poke-rsa keygen --fileless   --bundle-p '{"type_primary":"water"}'   --bundle-q '{"type_primary":"fire","generation":1}'
+
+# Generating keypair (p: filter {'type_primary': 'water'} / q: filter {'type_primary': 'fire', 'generation': 1})...
+#   Selected: Mudkip × Charizard
+```
+
+**Deterministic** — exact bundles, same pair every time:
+
+```bash
+poke-rsa keygen   --bundle-p '{"type_primary":"grass","base_stat_total":308}'   --bundle-q '{"type_primary":"fire","generation":1,"type_secondary":"flying"}'
+
+# Generating keypair (p: filter {...} / q: filter {...})...
+#   Selected: Snivy × Charizard
 #
 # ✓ Private key → private.key
 # ✓ Public key  → public.json
@@ -310,27 +369,14 @@ poke-rsa keygen \
 #   Modulus size: 510 bits
 ```
 
-**`--verbose`** — writes files and also prints key content to terminal:
+**`--verbose`** — writes files and also prints key content to terminal.
 
-```bash
-poke-rsa keygen --verbose \
-  --bundle-p '{"type_primary":"grass","base_stat_total":308}' \
-  --bundle-q '{"type_primary":"fire","generation":1,"type_secondary":"flying"}'
-```
+**`--fileless`** — prints keys to terminal only, no files written. Output is
+directly pasteable as input to the next command.
 
-**`--fileless`** — prints keys to terminal only, no files written. Output is directly pasteable as input to the next command:
-
-```bash
-poke-rsa keygen --fileless \
-  --bundle-p '{"type_primary":"grass","base_stat_total":308}' \
-  --bundle-q '{"type_primary":"fire","generation":1,"type_secondary":"flying"}'
-
-# Private Key (keep secret)
-#   {"n": 2882122...953657, "d": 455733...750077}
-#
-# Public Key (share with recipient)
-#   {"bundle_p": {"type_primary": "grass", "base_stat_total": 308}, "bundle_q": {"type_primary": "fire", "generation": 1, "type_secondary": "flying"}, "e": 65537}
-```
+> In all modes the public key bundle is auto-constructed from the selected
+> Pokémon's metadata — you never need to manually specify the public bundle
+> fields. The tool always tells you which Pokémon were chosen.
 
 ---
 
@@ -341,15 +387,18 @@ poke-rsa keygen --fileless \
 ```bash
 poke-rsa encrypt --message "Hello, Trainer!"
 
+# Encrypting message...
 # ✓ Encrypted message → encrypted.json
+#
+# Encryption Summary
+#   Blocks: 1
+#   Message length: 15 characters
 ```
 
 **Fileless** — paste the public key output from `keygen --fileless`:
 
 ```bash
-poke-rsa encrypt --fileless \
-  --message "Hello, Trainer!" \
-  --public-key '{"bundle_p":{...},"bundle_q":{...},"e":65537}'
+poke-rsa encrypt --fileless   --message "Hello, Trainer!"   --public-key '{"bundle_p":{...},"bundle_q":{...},"e":65537}'
 ```
 
 ---
@@ -367,9 +416,7 @@ poke-rsa decrypt
 **Fileless** — paste private key and encrypted message from previous outputs:
 
 ```bash
-poke-rsa decrypt --fileless \
-  --private-key '{"n":5232...,"d":5115...}' \
-  --encrypted '{"ciphertext":[...],"public_bundle":{...}}'
+poke-rsa decrypt --fileless   --private-key '{"n":5232...,"d":5115...}'   --encrypted '{"ciphertext":[...],"public_bundle":{...}}'
 ```
 
 ---

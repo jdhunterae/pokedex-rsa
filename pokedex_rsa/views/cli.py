@@ -34,6 +34,7 @@ from pokedex_rsa.controllers.encryption_controller import (
     EncryptedMessage,
     ResolutionError,
     SamePokemonError,
+    EmptyDatabaseError,
     ControllerError,
 )
 import json
@@ -137,17 +138,21 @@ def cli():
     to derive RSA primes. Share the metadata puzzle, not the key.
 
     \b
-    Quickstart (file mode):
-      poke-rsa keygen --bundle-p '{"type_primary":"grass"}' \\
-                      --bundle-q '{"type_primary":"fire","generation":1}'
+    Quickstart — fully random keys (file mode):
+      poke-rsa keygen
       poke-rsa encrypt --message "Hello, Trainer!"
       poke-rsa decrypt
 
     \b
-    Quickstart (fileless mode):
-      poke-rsa keygen --fileless --bundle-p '...' --bundle-q '...'
+    Quickstart — restricted keys (fileless mode):
+      poke-rsa keygen --fileless --bundle-p '{"type_primary":"water"}'
       poke-rsa encrypt --fileless --message "Hello!" --public-key '<paste>'
       poke-rsa decrypt --fileless --encrypted '<paste>' --private-key '<paste>'
+
+    \b
+    Check pool size before generating:
+      poke-rsa count --bundle '{"type_primary":"fire"}'
+      poke-rsa validate --bundle '{"type_primary":"grass","base_stat_total":308}'
     """
 
 
@@ -157,12 +162,15 @@ def cli():
 
 @cli.command()
 @click.option(
-    "--bundle-p", required=True,
-    help='JSON metadata bundle identifying the first Pokemon. e.g. \'{"type_primary":"fire","generation":1}\''
+    "--bundle-p", default=None, required=False,
+    help='JSON metadata bundle for the first Pokemon (prime p). Exact match resolves to one Pokemon. Partial match picks randomly from the pool. Omit for fully random selection. e.g. \'{"type_primary":"fire","generation":1}\''
 )
 @click.option(
-    "--bundle-q", required=True,
-    help='JSON metadata bundle identifying the second Pokemon.'
+    "--bundle-q", default=None, required=False,
+    help=(
+        "JSON metadata bundle for the second Pokemon (prime q). "
+        "Same rules as --bundle-p. Omit for fully random selection."
+    )
 )
 @click.option(
     "--private-key-out", default="private.key", show_default=True,
@@ -181,38 +189,50 @@ def cli():
     help="Print keys to terminal only. No files written."
 )
 def keygen(bundle_p, bundle_q, private_key_out, public_key_out, verbose, fileless):
-    """Generate a keypair from two Pokemon metadata bundles."""
+    """Generate a keypair. Bundles are optional.
+
+    \b
+    Modes:
+      Omit both bundles       fully random selection from entire DB
+      Partial bundle          random from matching pool
+      Exact unique bundle     deterministic selection (original behavior)
+
+    \b
+    Examples:
+      poke-rsa keygen --fileless
+      poke-rsa keygen --bundle-p '{"type_primary":"fire"}'
+      poke-rsa keygen --bundle-p '{"type_primary":"grass"}' \\
+                      --bundle-q '{"type_primary":"fire","generation":1}'
+    """
     _check_fileless_verbose(fileless, verbose)
 
-    bp = _parse_bundle(bundle_p, "--bundle-p")
-    bq = _parse_bundle(bundle_q, "--bundle-q")
+    bp = _parse_bundle(bundle_p, "--bundle-p") if bundle_p else None
+    bq = _parse_bundle(bundle_q, "--bundle-q") if bundle_q else None
 
-    # Validate bundles before doing any crypto work
-    controller = _controller()
-    ok_p, err_p, pokemon_p = controller.validate_bundle(bp)
-    if not ok_p:
-        _err(f"--bundle-p: {err_p}")
-
-    ok_q, err_q, pokemon_q = controller.validate_bundle(bq)
-    if not ok_q:
-        _err(f"--bundle-q: {err_q}")
-
-    if pokemon_p.name == pokemon_q.name:
-        _err(
-            f"Both bundles resolve to the same Pokemon ({pokemon_p.name}). Use two different Pokemon.")
-
-    click.echo(f"\nGenerating keypair from {click.style(pokemon_p.display_name, bold=True)} "
-               f"× {click.style(pokemon_q.display_name, bold=True)}...")
+    p_desc = f"filter {bp}" if bp else "random"
+    q_desc = f"filter {bq}" if bq else "random"
+    click.echo(f"\nGenerating keypair (p: {p_desc} / q: {q_desc})...")
 
     try:
+        controller = _controller()
         keypair = controller.generate_keypair(bp, bq)
-    except (ResolutionError, SamePokemonError, ControllerError) as e:
+    except EmptyDatabaseError as e:
         _err(str(e))
+    except ResolutionError as e:
+        _err(str(e))
+    except SamePokemonError as e:
+        _err(str(e))
+    except ControllerError as e:
+        _err(str(e))
+
+    click.echo(
+        f"  Selected: {click.style(keypair.pokemon_p.display_name, bold=True)} "
+        f"\u00d7 {click.style(keypair.pokemon_q.display_name, bold=True)}"
+    )
 
     private_json = _private_key_to_json(keypair.private_key)
     public_json = keypair.public_bundle.to_json()
-    public_inline = json.dumps(json.loads(
-        public_json))  # condensed single-line
+    public_inline = json.dumps(json.loads(public_json))
 
     # --- File output ---
     if not fileless:
@@ -401,6 +421,48 @@ def decrypt(private_key, private_key_file, encrypted, encrypted_file, out, verbo
         _ok(f'Decrypted: "{preview}"')
 
     click.echo()
+
+
+# ---------------------------------------------------------------------------
+# count
+# ---------------------------------------------------------------------------
+
+@cli.command()
+@click.option(
+    "--bundle", default=None,
+    help="Optional JSON partial bundle to filter by. Omit to count all Pokemon in the DB."
+)
+def count(bundle):
+    """Count how many Pokemon match a metadata bundle.
+
+    Useful for understanding how much a filter restricts the key pool
+    before running keygen. With no bundle, returns the total DB count.
+
+    \b
+    Examples:
+      poke-rsa count
+      poke-rsa count --bundle '{"type_primary":"fire"}'
+      poke-rsa count --bundle '{"type_primary":"grass","generation":1}'
+    """
+    b = _parse_bundle(bundle, "--bundle") if bundle else None
+    controller = _controller()
+
+    try:
+        total = controller.count_candidates()
+        matched = controller.count_candidates(b)
+    except ValueError as e:
+        _err(str(e))
+
+    if b:
+        click.echo(
+            f"\n  {click.style(str(matched), bold=True)} Pokemon match "
+            f"{click.style(json.dumps(b), fg='cyan')} "
+            f"(out of {click.style(str(total), bold=True)} total)\n"
+        )
+    else:
+        click.echo(
+            f"\n  {click.style(str(total), bold=True)} Pokemon in the database.\n"
+        )
 
 
 # ---------------------------------------------------------------------------

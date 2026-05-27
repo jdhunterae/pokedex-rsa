@@ -245,13 +245,21 @@ class TestKeygenCommand:
         ])
         assert_error(result, "mutually exclusive")
 
-    def test_missing_bundle_p_fails(self, runner, patched_controller):
-        result = runner.invoke(cli, ["keygen", "--bundle-q", BP_SQUIRTLE])
-        assert result.exit_code != 0
+    def test_missing_bundle_p_uses_random(self, runner, patched_controller):
+        # Omitting --bundle-p should succeed with random selection
+        result = invoke(
+            runner, ["keygen", "--fileless", "--bundle-q", BP_SQUIRTLE])
+        assert_success(result, "Selected")
 
-    def test_missing_bundle_q_fails(self, runner, patched_controller):
-        result = runner.invoke(cli, ["keygen", "--bundle-p", BP_BULBASAUR])
-        assert result.exit_code != 0
+    def test_missing_bundle_q_uses_random(self, runner, patched_controller):
+        # Omitting --bundle-q should succeed with random selection
+        result = invoke(
+            runner, ["keygen", "--fileless", "--bundle-p", BP_BULBASAUR])
+        assert_success(result, "Selected")
+
+    def test_no_bundles_succeeds(self, runner, patched_controller):
+        result = invoke(runner, ["keygen", "--fileless"])
+        assert_success(result, "Selected")
 
     def test_malformed_bundle_p_fails(self, runner, patched_controller):
         result = invoke(runner, [
@@ -269,21 +277,23 @@ class TestKeygenCommand:
         ])
         assert_error(result, "could not parse")
 
-    def test_ambiguous_bundle_p_fails(self, runner, patched_controller):
+    def test_ambiguous_bundle_p_uses_restricted_random(self, runner, patched_controller):
+        # Ambiguous bundle should succeed — picks randomly from matching pool
         result = invoke(runner, [
             "keygen", "--fileless",
             "--bundle-p", BP_AMBIGUOUS,
             "--bundle-q", BP_SQUIRTLE,
         ])
-        assert_error(result, "bundle-p")
+        assert_success(result, "Selected")
 
-    def test_ambiguous_bundle_q_fails(self, runner, patched_controller):
+    def test_ambiguous_bundle_q_uses_restricted_random(self, runner, patched_controller):
+        # Ambiguous bundle should succeed — picks randomly from matching pool
         result = invoke(runner, [
             "keygen", "--fileless",
             "--bundle-p", BP_BULBASAUR,
             "--bundle-q", BP_AMBIGUOUS,
         ])
-        assert_error(result, "bundle-q")
+        assert_success(result, "Selected")
 
     def test_no_match_bundle_p_fails(self, runner, patched_controller):
         result = invoke(runner, [
@@ -291,7 +301,7 @@ class TestKeygenCommand:
             "--bundle-p", BP_NO_MATCH,
             "--bundle-q", BP_SQUIRTLE,
         ])
-        assert_error(result, "bundle-p")
+        assert_error(result, "did not match")
 
     def test_same_pokemon_both_bundles_fails(self, runner, patched_controller):
         result = invoke(runner, [
