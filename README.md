@@ -55,13 +55,26 @@ source .venv/bin/activate
 
 The tool runs entirely offline after setup. The seeder script populates a local SQLite database from [PokeAPI](https://pokeapi.co) — run it once before using the encryption tool.
 
-Each Pokémon record stores: name, primary type, secondary type, height (m), weight (kg), base stat total, generation of first appearance, and Pokédex color.
+Each Pokémon record stores: name, form, primary type, secondary type, height (m), weight (kg), base stat total, generation of first appearance, and Pokédex color.
+
+### Regional variants
+
+Regional variants (Alolan, Galarian, Hisuian, Paldean) are stored as distinct records alongside their base forms using a composite `(id, form)` primary key. For example, the Cyndaquil line produces four records rather than three:
+
+```
+(155, default)  Cyndaquil        [Fire]
+(156, default)  Quilava          [Fire]
+(157, default)  Typhlosion       [Fire]
+(157, hisui)    Typhlosion-Hisui [Fire / Ghost]
+```
+
+This maximises the pool of unique metadata combinations available to the resolver and ensures that variants produce distinct primes from their base forms during key derivation. Cosmetic-only forms (Mega, G-Max, etc.) are excluded as they share types and stats with their base form and would pollute the resolver pool.
 
 ### Commands
 
 **Seed all starter lines (recommended starting point)**
 
-Pulls all three evolution stages for every generation's starters — 81 Pokémon across all nine gens. Good for development and testing since it forces the resolver to work harder at finding unique metadata combinations.
+Pulls all evolution stages for every generation's starters, including regional variants. Yields approximately 84–90 records across all nine gens — enough to meaningfully stress-test the resolver's uniqueness validation.
 
 ```bash
 python scripts/seed_db.py --starters
@@ -81,10 +94,20 @@ python scripts/seed_db.py --gen 1 --gen 2
 
 **Seed the entire national Pokédex**
 
-Pulls all ~1025 Pokémon. Expect this to take several minutes due to API rate limiting.
+Pulls all ~1025 species plus regional variants. Expect this to take several minutes due to API rate limiting.
 
 ```bash
 python scripts/seed_db.py
+```
+
+**Skip regional variants**
+
+Any of the above commands can be combined with `--no-variants` to pull base forms only.
+
+```bash
+python scripts/seed_db.py --starters --no-variants
+python scripts/seed_db.py --gen 1 --no-variants
+python scripts/seed_db.py --no-variants
 ```
 
 ### Append behavior
