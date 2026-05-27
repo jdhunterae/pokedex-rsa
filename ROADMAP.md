@@ -9,7 +9,8 @@ main                  # stable, working code only
     ├── phase/2-crypto
     ├── phase/3-controller
     ├── phase/4-cli
-    └── phase/5-polish
+    ├── phase/5-polish
+    └── phase/6-ui
 ```
 
 Each phase branch cuts from `develop`, gets merged back into `develop` when complete.
@@ -115,19 +116,56 @@ The user-facing surface. Depends on the controller being stable.
 >
 > Branch: `phase/5-polish` → merge into `develop` → merge into `main`
 
-- [ ] Flesh out README with full usage examples and real terminal output
-- [ ] Docstrings across all modules
-- [ ] Code cleanup and consistency pass
-- [ ] Update ROADMAP to reflect completed state
-- [ ] Stretch goals (if pursuing):
-  - [ ] Intentional ambiguity feature — metadata that resolves to multiple Pokemon, requiring an out-of-band hint
+- [ ] CLI test coverage — input validation and error path tests using Click's `CliRunner`
+  - Bad JSON on `--bundle-p`, `--bundle-q`, `--public-key`, `--private-key`, `--encrypted`
+  - Conflicting flags (`--verbose` + `--fileless`)
+  - Missing required flags in `--fileless` mode
+  - Nonexistent file paths in file mode
+  - Ambiguous and no-match bundles via `keygen` and `validate`
+  - Empty message on `encrypt`
+- [ ] README cleanup
+  - Remove intentional ambiguity from stretch goals (kept as discussion point only)
+  - Add Phase 6 UI section as planned next step
+- [ ] ROADMAP updated to reflect completed state
+- [ ] Any minor consistency or cleanup items identified during CLI testing
+
+---
+
+### Phase 6 — Web UI
+>
+> Branch: `phase/6-ui` → merge into `develop` → merge into `main`
+
+A minimal web interface for the encryption tool. Lives in `ui/` within the main repo and
+imports directly from the `pokedex_rsa` package as a local dependency. The UI does not
+replace the CLI — it provides an accessible alternative for demonstration purposes.
+
+#### Interface design
+
+Google Translate-style two-panel layout:
+
+- Left panel: plaintext input
+- Right panel: encrypted output (auto-populates on encrypt, or accepts paste for decrypt)
+- Key management panel: drag-and-drop or file picker for `private.key` / `public.json`,
+  or generate a new keypair inline with metadata bundle inputs and a `validate` helper
+- Export buttons: download `encrypted.json` or `plaintext.txt`
+
+#### Planned deliverables
+
+- [ ] `ui/app.py` — Flask application, routes wrapping the encryption controller
+- [ ] `ui/templates/index.html` — single-page interface
+- [ ] `ui/static/` — CSS and JS
+- [ ] `ui/requirements.txt` — Flask and UI-specific dependencies (separate from core)
+- [ ] Single-step launch: DB seeding check + Flask server start in one command
+  - Either a `poke-rsa-ui` entry point registered in `setup.py`
+  - Or a `--serve` flag extension to `setup.sh`
+- [ ] README updated with UI setup and usage instructions
 
 ---
 
 ## Stretch Goals
 
-Ideas to revisit after Phase 5, if the project warrants it.
+Ideas to revisit after Phase 6, if the project warrants it.
 
-- **Intentional ambiguity** — allow a sender to craft a public key that matches multiple Pokemon, requiring a shared secret hint to narrow down. Adds a second layer on top of the metadata resolution.
-- **Web UI** — a simple Flask or FastAPI front end wrapping the controller, making the tool more accessible as a demo.
+- **Intentional ambiguity** — allow a sender to craft a public key that matches multiple Pokémon, requiring a shared secret hint to narrow down. Conceptually interesting but better suited to a file-encryption use case than the current message-encryption model. Noted here for completeness.
+- **Separate UI repo** — if the web UI grows significantly, splitting `ui/` into its own repo with `pokedex-rsa` as a pip dependency is straightforward. Not necessary while the project is demonstration-focused.
 - **P2P messaging** — a minimal peer-to-peer messaging layer using the encryption engine, the originally considered scope for the project.
