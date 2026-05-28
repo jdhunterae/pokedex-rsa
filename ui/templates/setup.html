@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pokedex RSA — Initialize Database</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+
+<body class="setup-page">
+
+    <div class="setup-container">
+        <div class="setup-header">
+            <div class="logo-mark">◈</div>
+            <h1>POKÉDEX RSA</h1>
+            <p class="setup-subtitle">Database initialization required</p>
+        </div>
+
+        <div class="setup-card" id="setup-form">
+            <p class="setup-description">
+                No Pokémon database detected. Select a seeding option to initialize
+                the local database before using the encryption tool.
+            </p>
+
+            <div class="seed-options">
+                <label class="seed-option">
+                    <input type="radio" name="seed_mode" value="starters" checked />
+                    <div class="seed-option-content">
+                        <span class="seed-option-title">Starter Lines</span>
+                        <span class="seed-option-desc">All evolution stages for every generation's starters, including
+                            regional variants (~84–90 Pokémon). Recommended for development.</span>
+                    </div>
+                </label>
+
+                <label class="seed-option">
+                    <input type="radio" name="seed_mode" value="gen" />
+                    <div class="seed-option-content">
+                        <span class="seed-option-title">Select Generations</span>
+                        <span class="seed-option-desc">Seed specific generations only.</span>
+                        <div class="gen-checkboxes" id="gen-checkboxes">
+                            {% for g in range(1, 10) %}
+                            <label class="gen-check">
+                                <input type="checkbox" name="gen" value="{{ g }}" /> Gen {{ g }}
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </label>
+
+                <label class="seed-option">
+                    <input type="radio" name="seed_mode" value="full" />
+                    <div class="seed-option-content">
+                        <span class="seed-option-title">Full National Pokédex</span>
+                        <span class="seed-option-desc">All ~1025 Pokémon plus regional variants. Takes several minutes
+                            due to API rate limiting.</span>
+                    </div>
+                </label>
+            </div>
+
+            <button class="btn-primary" id="seed-btn" onclick="startSeed()">
+                Initialize Database
+            </button>
+        </div>
+
+        <div class="setup-card hidden" id="progress-card">
+            <div class="progress-header">
+                <span class="progress-title">Seeding database...</span>
+                <span class="progress-count" id="progress-count"></span>
+            </div>
+            <div class="progress-log" id="progress-log"></div>
+            <div class="progress-bar-wrap">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+            <button class="btn-primary hidden" id="launch-btn" onclick="window.location='/'">
+                Launch Pokedex RSA →
+            </button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/setup.js') }}"></script>
+</body>
+
+</html>

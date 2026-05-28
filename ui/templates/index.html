@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pokedex RSA</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+
+<body>
+
+    <!-- ── Header ─────────────────────────────────────────────────── -->
+    <header class="app-header">
+        <div class="header-left">
+            <span class="logo-mark">◈</span>
+            <span class="app-title">POKÉDEX RSA</span>
+        </div>
+        <div class="header-right">
+            <span class="db-status" id="db-status">● ONLINE</span>
+        </div>
+    </header>
+
+    <!-- ── Main layout ────────────────────────────────────────────── -->
+    <main class="app-main">
+
+        <!-- Key management sidebar -->
+        <aside class="key-panel" id="key-panel">
+            <div class="panel-label">KEY MANAGEMENT</div>
+
+            <!-- Status indicator -->
+            <div class="key-status" id="key-status">
+                <div class="key-status-indicator no-keys" id="key-indicator"></div>
+                <span id="key-status-text">No keys loaded</span>
+            </div>
+
+            <!-- Key info (shown when loaded) -->
+            <div class="key-info hidden" id="key-info">
+                <div class="key-info-row">
+                    <span class="key-info-label">POKÉMON P</span>
+                    <span class="key-info-value" id="pokemon-p">—</span>
+                </div>
+                <div class="key-info-row">
+                    <span class="key-info-label">POKÉMON Q</span>
+                    <span class="key-info-value" id="pokemon-q">—</span>
+                </div>
+                <div class="key-info-row">
+                    <span class="key-info-label">MODULUS</span>
+                    <span class="key-info-value" id="modulus-bits">—</span>
+                </div>
+            </div>
+
+            <div class="key-actions">
+                <!-- Generate new keys -->
+                <div class="key-section">
+                    <div class="section-title">GENERATE NEW KEYS</div>
+
+                    <div class="filter-group">
+                        <label class="filter-label">
+                            Filter P
+                            <span class="filter-count" id="count-p">— / —</span>
+                        </label>
+                        <div class="filter-row">
+                            <select class="filter-select" id="type-p" onchange="updateCount('p')">
+                                <option value="">Any type</option>
+                            </select>
+                            <select class="filter-select" id="gen-p" onchange="updateCount('p')">
+                                <option value="">Any gen</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="filter-label">
+                            Filter Q
+                            <span class="filter-count" id="count-q">— / —</span>
+                        </label>
+                        <div class="filter-row">
+                            <select class="filter-select" id="type-q" onchange="updateCount('q')">
+                                <option value="">Any type</option>
+                            </select>
+                            <select class="filter-select" id="gen-q" onchange="updateCount('q')">
+                                <option value="">Any gen</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button class="btn-primary" id="generate-btn" onclick="generateKeys()">
+                        Generate Keypair
+                    </button>
+                </div>
+
+                <!-- Upload existing keys -->
+                <div class="key-section">
+                    <div class="section-title">UPLOAD EXISTING KEYS</div>
+                    <div class="upload-row">
+                        <label class="upload-label" for="upload-private">
+                            <span>private.key</span>
+                            <input type="file" id="upload-private" accept=".key,.json" onchange="uploadKeys()" />
+                        </label>
+                        <label class="upload-label" for="upload-public">
+                            <span>public.json</span>
+                            <input type="file" id="upload-public" accept=".json" onchange="uploadKeys()" />
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Purge keys -->
+                <button class="btn-danger hidden" id="purge-btn" onclick="purgeKeys()">
+                    Purge Session Keys
+                </button>
+            </div>
+        </aside>
+
+        <!-- Encryption panels -->
+        <section class="crypto-panels">
+
+            <!-- Direction indicator -->
+            <div class="direction-bar">
+                <span class="direction-label" id="direction-label">— awaiting keys —</span>
+            </div>
+
+            <div class="panels-row">
+                <!-- Plaintext panel -->
+                <div class="panel" id="panel-plain">
+                    <div class="panel-header">
+                        <span class="panel-title">PLAINTEXT</span>
+                        <button class="panel-action hidden" id="export-plain" onclick="exportFile('plain')">
+                            Export .txt
+                        </button>
+                    </div>
+                    <textarea class="panel-textarea" id="textarea-plain"
+                        placeholder="Type or paste your plaintext message here…" disabled
+                        oninput="onPanelInput('plain')"></textarea>
+                    <div class="panel-footer">
+                        <span class="panel-hint" id="hint-plain"></span>
+                    </div>
+                </div>
+
+                <!-- Swap indicator -->
+                <div class="panel-divider">
+                    <div class="divider-arrow" id="divider-arrow">⟷</div>
+                </div>
+
+                <!-- Ciphertext panel -->
+                <div class="panel" id="panel-cipher">
+                    <div class="panel-header">
+                        <span class="panel-title">CIPHERTEXT</span>
+                        <button class="panel-action hidden" id="export-cipher" onclick="exportFile('cipher')">
+                            Export .json
+                        </button>
+                    </div>
+                    <textarea class="panel-textarea mono" id="textarea-cipher"
+                        placeholder="Paste encrypted JSON here to decrypt…" disabled
+                        oninput="onPanelInput('cipher')"></textarea>
+                    <div class="panel-footer">
+                        <span class="panel-hint" id="hint-cipher"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status bar -->
+            <div class="status-bar" id="status-bar">
+                <span id="status-text">Load or generate keys to begin.</span>
+            </div>
+
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/keys.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+
+</html>

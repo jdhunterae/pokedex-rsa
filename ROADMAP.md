@@ -255,3 +255,51 @@ Ideas to revisit after Phase 6, if the project warrants it.
 - **P2P messaging** — a minimal peer-to-peer messaging layer using the encryption
   engine. Would require a user profile system where each user's public bundle is
   shareable on request — the natural evolution of the current key exchange model.
+
+---
+
+### Phase 7 — UI Polish & Convenience Features
+>
+> Branch: `phase/7-ui-polish` → merge into `develop` → merge into `main`
+
+Quality-of-life improvements to the web UI identified during Phase 6 usage.
+None of these change core functionality — all encryption, decryption, and key
+management logic remains in the existing layers.
+
+#### Key panel UX
+
+- [ ] **Purge button positioning** — move "Purge Session Keys" to immediately
+      below the key status / key info area, not below the generate and upload
+      sections. The purge action belongs with the loaded-key display, not buried
+      under unrelated controls.
+- [ ] **Hide generate and upload when keys are loaded** — collapse the "Generate
+      New Keys" and "Upload Existing Keys" sections when a keypair is active.
+      The user must purge before generating or uploading new keys. This prevents
+      accidental key replacement mid-session and clarifies the intended workflow.
+- [ ] **Specific Pokémon selection in keygen** — extend the filter UI to support
+      narrowing down to a single Pokémon for deterministic key generation. The
+      current type + generation dropdowns are not always enough to isolate one
+      Pokémon. Options to consider:
+      - Add additional filter fields (color, BST range, weight, form)
+      - Add a live search / autocomplete by name
+      - Show the current candidate list so the user can see what they're picking from
+      This is important for the use case where a recipient needs to re-derive the
+      exact same keypair to decrypt a message from a known sender.
+
+#### File drag-and-drop on text panels
+
+- [ ] **Drag-and-drop `encrypted.json` onto the ciphertext panel** — user can
+      drag an exported JSON file directly onto the right panel instead of opening
+      the file and copy-pasting. Typing and paste should continue to work as-is.
+- [ ] **Drag-and-drop `.txt` onto the plaintext panel** — user can drag a plain
+      text file onto the left panel to load it for encryption. Typing and paste
+      should continue to work as-is.
+
+#### Key export / download
+
+- [ ] **Download private key** — button to download the current session's
+      `private.key` file so it can be preserved between sessions.
+- [ ] **Download public key** — button to download `public.json` so it can be
+      shared with senders or stored for reference.
+      These are essential for any workflow where the user generates keys in one
+      session and needs to decrypt messages received later.
