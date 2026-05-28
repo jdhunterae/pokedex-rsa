@@ -21,81 +21,66 @@ function startSeed() {
     const countEl = document.getElementById('progress-count');
     const launchBtn = document.getElementById('launch-btn');
 
-    const evtSource = new EventSource('/api/setup/seed?' + new URLSearchParams({
-        _t: Date.now()
-    }));
-
-    // Kick off via POST first, then SSE for progress
+    // Start the seeder
     fetch('/api/setup/seed', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode, gens }),
-    });
-
-    // We use SSE from the POST response stream — re-open as EventSource
-    // Actually: POST returns SSE stream, so we use fetch + ReadableStream
-    evtSource.close();
-
-    streamSeed(mode, gens, log, bar, countEl, launchBtn);
+    })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.started) {
+                log.textContent += `\n✗ Error: ${data.error || 'Could not start seeder.'}\n`;
+                return;
+            }
+            // Begin polling for progress
+            pollProgress(log, bar, countEl, launchBtn);
+        })
+        .catch(err => {
+            log.textContent += `\n✗ Network error: ${err.message}\n`;
+        });
 }
 
-async function streamSeed(mode, gens, log, bar, countEl, launchBtn) {
-    try {
-        const resp = await fetch('/api/setup/seed', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode, gens }),
-        });
+let seenLines = 0;
 
-        const reader = resp.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let insertedCount = 0;
+function pollProgress(log, bar, countEl, launchBtn) {
+    fetch('/api/setup/progress')
+        .then(r => r.json())
+        .then(data => {
+            // Append any new log lines
+            const newLines = data.log.slice(seenLines);
+            newLines.forEach(line => {
+                log.textContent += line + '\n';
+                log.scrollTop = log.scrollHeight;
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop();
-
-            for (const line of lines) {
-                if (!line.startsWith('data:')) continue;
-                const msg = line.slice(5).trim();
-
-                if (msg.startsWith('DONE:')) {
-                    const count = msg.split(':')[1];
-                    countEl.textContent = `${count} records`;
-                    bar.classList.add('done');
-                    log.textContent += `\n✓ Done. ${count} Pokemon in database.\n`;
-                    log.scrollTop = log.scrollHeight;
-                    launchBtn.classList.remove('hidden');
-                    return;
+                // Rough progress based on inserted records
+                if (line.includes('✓') || line.match(/^\[/)) {
+                    const pct = Math.min(95, parseInt(bar.style.width || '0') + 2);
+                    bar.style.width = pct + '%';
                 }
+            });
+            seenLines = data.log.length;
 
-                if (msg.startsWith('ERROR:')) {
-                    const errMsg = msg.slice(6);
-                    log.textContent += `\n✗ Error: ${errMsg}\n`;
-                    bar.style.background = 'var(--red)';
-                    bar.classList.add('done');
-                    return;
-                }
-
-                if (msg) {
-                    log.textContent += msg + '\n';
-                    log.scrollTop = log.scrollHeight;
-
-                    // Rough progress animation based on inserted lines
-                    if (msg.includes('✓') || msg.startsWith('[')) {
-                        insertedCount++;
-                        const pct = Math.min(95, insertedCount * 2);
-                        bar.style.width = pct + '%';
-                    }
-                }
+            if (data.error) {
+                log.textContent += `\n✗ Error: ${data.error}\n`;
+                bar.style.background = 'var(--red)';
+                bar.classList.add('done');
+                return;
             }
-        }
-    } catch (err) {
-        document.getElementById('progress-log').textContent += `\n✗ Connection error: ${err}\n`;
-    }
+
+            if (data.done) {
+                countEl.textContent = `${data.count} records`;
+                bar.classList.add('done');
+                log.textContent += `\n✓ Done. ${data.count} Pokemon in database.\n`;
+                log.scrollTop = log.scrollHeight;
+                launchBtn.classList.remove('hidden');
+                return;
+            }
+
+            // Still running — poll again in 750ms
+            setTimeout(() => pollProgress(log, bar, countEl, launchBtn), 750);
+        })
+        .catch(err => {
+            log.textContent += `\n✗ Poll error: ${err.message}\n`;
+        });
 }

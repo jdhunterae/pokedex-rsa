@@ -66,15 +66,16 @@ class ResolutionError(ControllerError):
 
 class SamePokemonError(ControllerError):
     """
-    Raised when both prime slots resolve to the same Pokemon.
+    Raised when both prime slots can only resolve to the same Pokemon.
     RSA requires two *distinct* primes — the same Pokemon would produce p == q.
     """
 
     def __init__(self, pokemon: Pokemon):
         self.pokemon = pokemon
         super().__init__(
-            f"Both slots resolved to the same Pokemon ({pokemon.name}). "
-            "Each slot must identify a different Pokemon."
+            f"Both filters can only select the same Pokemon ({pokemon.display_name}). "
+            "RSA requires two distinct Pokemon. "
+            "Change at least one filter to include different Pokemon."
         )
 
 
@@ -371,18 +372,54 @@ class EncryptionController:
         SamePokemonError   If both slots resolve to the same Pokemon.
         EmptyDatabaseError If the database has no records.
         """
-        pokemon_p, minimal_p = self._select_pokemon(bundle_p, label="bundle_p")
+        # Resolve the candidate pools for both slots upfront so we can check
+        # whether a non-colliding pair is even possible before attempting random
+        # selection. This avoids silently retrying in an impossible situation.
+        pool_p = self._resolver.candidates(bundle_p or {})
+        pool_q = self._resolver.candidates(bundle_q or {})
 
-        # Retry loop: if random selection produces the same Pokemon for both
-        # slots, retry up to 10 times before raising.
-        max_attempts = 10
-        for attempt in range(max_attempts):
-            pokemon_q, minimal_q = self._select_pokemon(
-                bundle_q, label="bundle_q")
-            if pokemon_q.name != pokemon_p.name:
+        if not pool_p:
+            raise ResolutionError(
+                "bundle_p matched no Pokemon in the database.",
+                bundle=bundle_p or {},
+                cause=NoMatchError(bundle_p or {}),
+            )
+        if not pool_q:
+            raise ResolutionError(
+                "bundle_q matched no Pokemon in the database.",
+                bundle=bundle_q or {},
+                cause=NoMatchError(bundle_q or {}),
+            )
+
+        # Check whether a non-colliding pair is possible at all.
+        # If both pools contain only one Pokemon and it's the same one,
+        # no amount of retrying will help — tell the user immediately.
+        names_p = {p.name for p in pool_p}
+        names_q = {p.name for p in pool_q}
+        if names_p == names_q and len(names_p) == 1:
+            raise SamePokemonError(pool_p[0])
+
+        # If the pools overlap but have other options, we can find a valid pair.
+        # Pick from each pool ensuring the two selections differ.
+        import random as _random
+        max_attempts = 50
+        pokemon_p = pokemon_q = None
+        for _ in range(max_attempts):
+            pokemon_p = _random.choice(pool_p)
+            pokemon_q = _random.choice(pool_q)
+            if pokemon_p.name != pokemon_q.name:
                 break
         else:
-            raise SamePokemonError(pokemon_p)
+            # Pools overlap completely — find valid pair exhaustively
+            valid_pairs = [
+                (a, b) for a in pool_p for b in pool_q if a.name != b.name
+            ]
+            if not valid_pairs:
+                raise SamePokemonError(pool_p[0])
+            pokemon_p, pokemon_q = _random.choice(valid_pairs)
+
+        minimal_p = self._build_minimal_bundle(pokemon_p)
+        minimal_q = self._build_minimal_bundle(pokemon_q)
 
         p = derive_prime(pokemon_p.name)
         q = derive_prime(pokemon_q.name)

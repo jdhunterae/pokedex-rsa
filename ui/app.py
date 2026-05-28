@@ -43,7 +43,7 @@ import uuid
 
 from flask import (
     Flask, jsonify, redirect, render_template,
-    request, session, url_for, Response, stream_with_context
+    request, session, url_for
 )
 
 # Allow importing from the project root
@@ -169,26 +169,40 @@ def api_setup_status():
     return jsonify({"count": count, "ready": count > 0})
 
 
+# Seeder job state — simple in-process store for the single active job
+_seed_job = {"running": False, "log": [],
+             "done": False, "error": None, "count": 0}
+
+
 @app.route("/api/setup/seed", methods=["POST"])
 def api_setup_seed():
     """
-    Trigger the seeder and stream progress back as Server-Sent Events.
+    Start the seeder in a background thread.
     Request body: { "mode": "starters" | "gen" | "full", "gens": [1,2,...] }
+    Poll /api/setup/progress for status updates.
     """
+    import threading
+
+    global _seed_job
+    if _seed_job["running"]:
+        return jsonify({"started": False, "error": "Seeder already running."})
+
     data = request.get_json(silent=True) or {}
     mode = data.get("mode", "starters")
     gens = data.get("gens", [])
 
-    cmd = [sys.executable, SEEDER_PATH, "--clean"]
+    cmd = [sys.executable, SEEDER_PATH]
     if mode == "starters":
         cmd.append("--starters")
     elif mode == "gen" and gens:
         for g in gens:
             cmd += ["--gen", str(g)]
-    # else: full dex — no extra flags
 
-    def generate():
-        yield "data: Starting seeder...\n\n"
+    _seed_job = {"running": True, "log": [
+        "Starting seeder..."], "done": False, "error": None, "count": 0}
+
+    def run():
+        global _seed_job
         try:
             proc = subprocess.Popen(
                 cmd,
@@ -200,20 +214,32 @@ def api_setup_seed():
             for line in proc.stdout:
                 line = line.rstrip()
                 if line:
-                    yield f"data: {line}\n\n"
+                    _seed_job["log"].append(line)
             proc.wait()
             if proc.returncode == 0:
-                yield f"data: DONE:{_db_count()}\n\n"
+                _seed_job["count"] = _db_count()
+                _seed_job["done"] = True
             else:
-                yield "data: ERROR:Seeder exited with an error.\n\n"
+                _seed_job["error"] = "Seeder exited with an error."
         except Exception as e:
-            yield f"data: ERROR:{e}\n\n"
+            _seed_job["error"] = str(e)
+        finally:
+            _seed_job["running"] = False
 
-    return Response(
-        stream_with_context(generate()),
-        mimetype="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({"started": True})
+
+
+@app.route("/api/setup/progress")
+def api_setup_progress():
+    """Poll for seeder progress. Returns current log lines, done flag, and record count."""
+    return jsonify({
+        "running": _seed_job["running"],
+        "log":     _seed_job["log"],
+        "done":    _seed_job["done"],
+        "error":   _seed_job["error"],
+        "count":   _seed_job["count"],
+    })
 
 
 # ---------------------------------------------------------------------------

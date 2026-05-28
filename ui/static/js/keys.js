@@ -196,7 +196,10 @@ function onKeysLoaded(data) {
         document.getElementById('modulus-bits').textContent = `${data.modulus_bits} bits`;
     }
 
+    // Show purge button directly under key info; hide generate/upload sections
     document.getElementById('purge-btn').classList.remove('hidden');
+    document.getElementById('key-divider').classList.remove('hidden');
+    document.getElementById('key-actions').classList.add('hidden');
     enablePanels(true);
 }
 
@@ -204,7 +207,11 @@ function onKeysCleared() {
     document.getElementById('key-indicator').className = 'key-status-indicator no-keys';
     document.getElementById('key-status-text').textContent = 'No keys loaded';
     document.getElementById('key-info').classList.add('hidden');
+
+    // Hide purge button; restore generate/upload sections
     document.getElementById('purge-btn').classList.add('hidden');
+    document.getElementById('key-divider').classList.add('hidden');
+    document.getElementById('key-actions').classList.remove('hidden');
     enablePanels(false);
 }
 

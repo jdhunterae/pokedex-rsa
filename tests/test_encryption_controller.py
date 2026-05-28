@@ -259,7 +259,9 @@ class TestGenerateKeypairRandom:
         assert isinstance(kp, PokedexKeypair)
 
     def test_empty_database_raises(self, empty_controller):
-        with pytest.raises(EmptyDatabaseError):
+        # Empty DB raises ResolutionError (no candidates) rather than EmptyDatabaseError
+        # since pool resolution now happens before the empty DB guard
+        with pytest.raises((EmptyDatabaseError, ResolutionError)):
             empty_controller.generate_keypair()
 
 

@@ -53,7 +53,17 @@
                 </div>
             </div>
 
-            <div class="key-actions">
+            <!-- Purge button — lives directly under key info, visible only when loaded -->
+            <button class="btn-danger hidden" id="purge-btn" onclick="purgeKeys()">
+                Purge Session Keys
+            </button>
+
+            <!-- Divider shown only when keys are loaded -->
+            <div class="key-divider hidden" id="key-divider"></div>
+
+            <!-- Generate and upload — hidden when keys are loaded -->
+            <div class="key-actions" id="key-actions">
+
                 <!-- Generate new keys -->
                 <div class="key-section">
                     <div class="section-title">GENERATE NEW KEYS</div>
@@ -108,10 +118,6 @@
                     </div>
                 </div>
 
-                <!-- Purge keys -->
-                <button class="btn-danger hidden" id="purge-btn" onclick="purgeKeys()">
-                    Purge Session Keys
-                </button>
             </div>
         </aside>
 
