@@ -666,3 +666,42 @@ class TestDecryptCommand:
             assert "secret" not in result.output
         else:
             assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# count command
+# ---------------------------------------------------------------------------
+
+class TestCountCommand:
+
+    def test_no_bundle_returns_total(self, runner, patched_controller):
+        result = invoke(runner, ["count"])
+        assert_success(result)
+        # Should mention the total count
+        assert any(c.isdigit() for c in result.output)
+
+    def test_partial_bundle_shows_matched_and_total(self, runner, patched_controller):
+        result = invoke(runner, ["count", "--bundle", BP_AMBIGUOUS])
+        assert_success(result)
+        # Should show e.g. "4 ... 7"
+        assert "4" in result.output
+        assert "7" in result.output
+
+    def test_exact_bundle_shows_one(self, runner, patched_controller):
+        result = invoke(runner, ["count", "--bundle", BP_BULBASAUR])
+        assert_success(result)
+        assert "1" in result.output
+
+    def test_no_match_shows_zero(self, runner, patched_controller):
+        result = invoke(runner, ["count", "--bundle", BP_NO_MATCH])
+        assert_success(result)
+        assert "0" in result.output
+
+    def test_malformed_bundle_fails(self, runner, patched_controller):
+        result = invoke(runner, ["count", "--bundle", "not-json"])
+        assert_error(result, "could not parse")
+
+    def test_invalid_field_fails(self, runner, patched_controller):
+        result = invoke(runner, ["count", "--bundle",
+                        '{"not_a_field": "value"}'])
+        assert_error(result, "invalid")

@@ -439,6 +439,49 @@ def api_session_purge_keys():
 # Bundle API
 # ---------------------------------------------------------------------------
 
+
+@app.route("/api/bundle/candidates", methods=["POST"])
+def api_bundle_candidates():
+    """
+    Return Pokemon matching a partial bundle plus an optional name search.
+    Used to populate the keygen autocomplete dropdown.
+
+    Request body:
+      { "bundle": {...} | null, "search": "bulba", "limit": 12 }
+
+    Returns:
+      { "candidates": [...], "matched": int, "total": int }
+    """
+    data = request.get_json(silent=True) or {}
+    bundle = data.get("bundle") or None
+    search = data.get("search", "").strip() or None
+    limit = int(data.get("limit", 20))
+
+    try:
+        controller = _controller()
+        total = controller.count_candidates()
+        matched = controller.count_candidates(bundle)
+        candidates = controller.list_candidates(bundle, search, limit)
+        return jsonify({
+            "candidates": [
+                {
+                    "id":           p.id,
+                    "form":         p.form,
+                    "name":         p.name,
+                    "display_name": p.display_name,
+                    "display":      str(p),
+                    "types":        list(p.types),
+                    "generation":   p.generation,
+                }
+                for p in candidates
+            ],
+            "matched": matched,
+            "total":   total,
+        })
+    except ValueError as e:
+        return _err(str(e))
+
+
 @app.route("/api/bundle/count", methods=["POST"])
 def api_bundle_count():
     """

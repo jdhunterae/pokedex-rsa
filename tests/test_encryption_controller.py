@@ -532,3 +532,150 @@ class TestValidateBundle:
         assert ok is False
         assert err is not None
         assert pokemon is None
+
+
+# ---------------------------------------------------------------------------
+# validate_keypair
+# ---------------------------------------------------------------------------
+
+class TestValidateKeypair:
+
+    def test_valid_matching_pair(self, controller):
+        kp = controller.generate_keypair(BUNDLE_BULBASAUR, BUNDLE_CHARMANDER)
+        status, error, pokemon_p, pokemon_q = controller.validate_keypair(
+            kp.public_bundle, kp.private_key
+        )
+        assert status == "valid"
+        assert error is None
+        assert pokemon_p.name == "bulbasaur"
+        assert pokemon_q.name == "charmander"
+
+    def test_valid_returns_correct_pokemon(self, controller):
+        kp = controller.generate_keypair(BUNDLE_TYPHLOSION, BUNDLE_HISUI)
+        status, _, pokemon_p, pokemon_q = controller.validate_keypair(
+            kp.public_bundle, kp.private_key
+        )
+        assert status == "valid"
+        assert pokemon_p.name == "typhlosion"
+        assert pokemon_q.name == "typhlosion-hisui"
+
+    def test_mismatch_different_keypairs(self, controller):
+        kp1 = controller.generate_keypair(BUNDLE_BULBASAUR, BUNDLE_CHARMANDER)
+        kp2 = controller.generate_keypair(BUNDLE_SQUIRTLE, BUNDLE_MUDKIP)
+        # Use kp1 public bundle but kp2 private key
+        status, error, pokemon_p, pokemon_q = controller.validate_keypair(
+            kp1.public_bundle, kp2.private_key
+        )
+        assert status == "mismatch"
+        assert error is not None
+        assert "mismatch" in error.lower()
+        assert pokemon_p is None
+        assert pokemon_q is None
+
+    def test_unresolvable_bundle(self, controller):
+        from pokedex_rsa.controllers.encryption_controller import PokedexPublicBundle
+        from pokedex_rsa.models.crypto import PrivateKey
+        # Public bundle references a Pokemon not in the DB
+        bad_bundle = PokedexPublicBundle(
+            bundle_p={"type_primary": "dragon"},  # no match
+            bundle_q=BUNDLE_SQUIRTLE,
+            e=65537,
+        )
+        kp = controller.generate_keypair(BUNDLE_BULBASAUR, BUNDLE_CHARMANDER)
+        status, error, pokemon_p, pokemon_q = controller.validate_keypair(
+            bad_bundle, kp.private_key
+        )
+        assert status == "unresolvable"
+        assert error is not None
+        assert "database" in error.lower() or "re-seed" in error.lower()
+        assert pokemon_p is None
+        assert pokemon_q is None
+
+    def test_valid_pair_n_values_match(self, controller):
+        # Confirm the validation actually checks n = p * q
+        from pokedex_rsa.models.crypto import derive_prime
+        kp = controller.generate_keypair(BUNDLE_BULBASAUR, BUNDLE_CHARMANDER)
+        status, _, p, q = controller.validate_keypair(
+            kp.public_bundle, kp.private_key)
+        assert status == "valid"
+        expected_n = derive_prime(p.name) * derive_prime(q.name)
+        assert expected_n == kp.private_key.n
+
+    def test_mismatch_error_message_is_actionable(self, controller):
+        kp1 = controller.generate_keypair(BUNDLE_BULBASAUR, BUNDLE_CHARMANDER)
+        kp2 = controller.generate_keypair(BUNDLE_SQUIRTLE, BUNDLE_MUDKIP)
+        _, error, _, _ = controller.validate_keypair(
+            kp1.public_bundle, kp2.private_key)
+        # Error should tell user what to do, not just what went wrong
+        assert error is not None
+        assert len(error) > 20
+
+
+# ---------------------------------------------------------------------------
+# list_candidates
+# ---------------------------------------------------------------------------
+
+class TestListCandidates:
+
+    def test_no_bundle_returns_all(self, controller):
+        results = controller.list_candidates()
+        assert len(results) == len(TEST_RECORDS)
+
+    def test_empty_bundle_returns_all(self, controller):
+        results = controller.list_candidates({})
+        assert len(results) == len(TEST_RECORDS)
+
+    def test_bundle_filters_correctly(self, controller):
+        results = controller.list_candidates({"type_primary": "fire"})
+        assert all(p.type_primary == "fire" for p in results)
+        # charmander, cyndaquil, typhlosion, typhlosion-hisui
+        assert len(results) == 4
+
+    def test_exact_bundle_returns_one(self, controller):
+        results = controller.list_candidates(BUNDLE_BULBASAUR)
+        assert len(results) == 1
+        assert results[0].name == "bulbasaur"
+
+    def test_no_match_returns_empty(self, controller):
+        results = controller.list_candidates({"type_primary": "dragon"})
+        assert results == []
+
+    def test_search_filters_by_name(self, controller):
+        results = controller.list_candidates(search="typhlo")
+        names = {p.name for p in results}
+        assert "typhlosion" in names
+        assert "typhlosion-hisui" in names
+        assert "bulbasaur" not in names
+
+    def test_search_is_case_insensitive(self, controller):
+        lower = controller.list_candidates(search="typhlo")
+        upper = controller.list_candidates(search="TYPHLO")
+        assert {p.name for p in lower} == {p.name for p in upper}
+
+    def test_search_with_bundle_filters_both(self, controller):
+        # fire type + search "typhlo" should return only the two typhlosions
+        results = controller.list_candidates(
+            partial_bundle={"type_primary": "fire"},
+            search="typhlo"
+        )
+        names = {p.name for p in results}
+        assert names == {"typhlosion", "typhlosion-hisui"}
+        assert "charmander" not in names
+
+    def test_limit_caps_results(self, controller):
+        results = controller.list_candidates(limit=2)
+        assert len(results) <= 2
+
+    def test_limit_default_is_20(self, controller):
+        # With only 7 records in test DB, all fit under default limit
+        results = controller.list_candidates()
+        assert len(results) == len(TEST_RECORDS)
+
+    def test_returns_pokemon_objects(self, controller):
+        from pokedex_rsa.models.pokemon import Pokemon
+        results = controller.list_candidates()
+        assert all(isinstance(p, Pokemon) for p in results)
+
+    def test_search_no_match_returns_empty(self, controller):
+        results = controller.list_candidates(search="zzzznotapokemon")
+        assert results == []

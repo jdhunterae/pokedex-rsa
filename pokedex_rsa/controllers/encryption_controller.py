@@ -539,6 +539,35 @@ class EncryptionController:
 
         return ("valid", None, pokemon_p, pokemon_q)
 
+    def list_candidates(
+        self,
+        partial_bundle: Optional[dict] = None,
+        search: Optional[str] = None,
+        limit: int = 20,
+    ) -> list:
+        """
+        Return Pokemon matching a partial bundle, optionally filtered by
+        a name search fragment. Results are capped at `limit` for UI performance.
+
+        Parameters
+        ----------
+        partial_bundle : dict or None
+            Any combination of valid fields to filter by.
+        search : str or None
+            Case-insensitive substring to match against Pokemon names.
+        limit : int
+            Maximum number of results to return.
+
+        Returns
+        -------
+        list[Pokemon]
+        """
+        candidates = self._resolver.candidates(partial_bundle or {})
+        if search:
+            needle = search.lower().strip()
+            candidates = [p for p in candidates if needle in p.name.lower()]
+        return candidates[:limit]
+
     def count_candidates(self, partial_bundle: Optional[dict] = None) -> int:
         """
         Return the number of Pokemon matching a partial bundle.

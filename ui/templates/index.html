@@ -67,34 +67,53 @@
             <div class="key-section" id="generate-section">
                 <div class="section-title">GENERATE NEW KEYS</div>
 
-                <div class="filter-group">
-                    <label class="filter-label">
-                        Filter P
+                <!-- Filter slot P -->
+                <div class="filter-slot" id="filter-slot-p">
+                    <div class="filter-slot-header">
+                        <span class="filter-slot-label">Pokémon P</span>
                         <span class="filter-count" id="count-p">— / —</span>
-                    </label>
-                    <div class="filter-row">
-                        <select class="filter-select" id="type-p" onchange="onFilterChange()">
-                            <option value="">Any type</option>
-                        </select>
-                        <select class="filter-select" id="gen-p" onchange="onFilterChange()">
-                            <option value="">Any gen</option>
-                        </select>
                     </div>
+
+                    <!-- Search input (shown when unlocked) -->
+                    <div class="filter-search-wrap" id="search-wrap-p">
+                        <input type="text" class="filter-search-input" id="search-p" placeholder="search or select…"
+                            oninput="onSearchInput('p')" onfocus="onSearchFocus('p')" autocomplete="off" />
+                        <div class="filter-autocomplete hidden" id="autocomplete-p"></div>
+                    </div>
+
+                    <!-- Locked display (shown when a pokémon is selected) -->
+                    <div class="filter-locked hidden" id="locked-p">
+                        <div class="slot-dot loaded"></div>
+                        <span class="locked-display-name" id="locked-display-p"></span>
+                        <button class="lock-clear-btn" onclick="clearLock('p')">✕</button>
+                    </div>
+
+                    <!-- Dynamic filter rows -->
+                    <div class="filter-rows" id="filter-rows-p"></div>
+                    <button class="btn-add-filter" onclick="addFilterRow('p')">+ add filter</button>
                 </div>
 
-                <div class="filter-group">
-                    <label class="filter-label">
-                        Filter Q
+                <!-- Filter slot Q -->
+                <div class="filter-slot" id="filter-slot-q">
+                    <div class="filter-slot-header">
+                        <span class="filter-slot-label">Pokémon Q</span>
                         <span class="filter-count" id="count-q">— / —</span>
-                    </label>
-                    <div class="filter-row">
-                        <select class="filter-select" id="type-q" onchange="onFilterChange()">
-                            <option value="">Any type</option>
-                        </select>
-                        <select class="filter-select" id="gen-q" onchange="onFilterChange()">
-                            <option value="">Any gen</option>
-                        </select>
                     </div>
+
+                    <div class="filter-search-wrap" id="search-wrap-q">
+                        <input type="text" class="filter-search-input" id="search-q" placeholder="search or select…"
+                            oninput="onSearchInput('q')" onfocus="onSearchFocus('q')" autocomplete="off" />
+                        <div class="filter-autocomplete hidden" id="autocomplete-q"></div>
+                    </div>
+
+                    <div class="filter-locked hidden" id="locked-q">
+                        <div class="slot-dot loaded"></div>
+                        <span class="locked-display-name" id="locked-display-q"></span>
+                        <button class="lock-clear-btn" onclick="clearLock('q')">✕</button>
+                    </div>
+
+                    <div class="filter-rows" id="filter-rows-q"></div>
+                    <button class="btn-add-filter" onclick="addFilterRow('q')">+ add filter</button>
                 </div>
 
                 <button class="btn-primary" id="generate-btn" onclick="generateKeys()">
