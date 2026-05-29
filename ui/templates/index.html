@@ -56,6 +56,16 @@
             <!-- Partial / error message — shown in states 2, mismatch, unresolvable -->
             <div class="key-message hidden" id="key-message"></div>
 
+            <!-- Key export buttons — visible only when both keys are loaded and valid -->
+            <div class="key-export hidden" id="key-export">
+                <a class="btn-export" href="/api/session/download/private" download="private.key">
+                    ↓ private.key
+                </a>
+                <a class="btn-export" href="/api/session/download/public" download="public.json">
+                    ↓ public.json
+                </a>
+            </div>
+
             <!-- Purge button — shown whenever anything is loaded -->
             <button class="btn-danger hidden" id="purge-btn" onclick="purgeKeys()">
                 Purge Session Keys

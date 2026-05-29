@@ -386,6 +386,34 @@ body {
     color: var(--red);
 }
 
+
+/* ── Key export buttons */
+.key-export {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.btn-export {
+    display: block;
+    padding: 7px 0;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.btn-export:hover {
+    border-color: var(--green);
+    color: var(--green);
+}
+
 /* ── Key divider */
 .key-divider {
     height: 1px;

@@ -531,6 +531,7 @@ function applyStateEmpty() {
     hide('key-info');
     hide('key-message');
     hide('purge-btn');
+    hide('key-export');
     hide('key-divider');
     show('generate-section');
     show('upload-section');
@@ -549,6 +550,7 @@ function applyStatePartial(hasPrivate, hasPublic) {
         : 'public.json loaded · please provide private.key to continue';
     setMessage(msg, '');
     show('purge-btn');
+    hide('key-export');
     hide('key-divider');
     show('upload-section');
     hide('generate-section');
@@ -566,6 +568,7 @@ function applyStateMismatch(errorMsg) {
         'error'
     );
     show('purge-btn');
+    hide('key-export');
     hide('key-divider');
     hide('upload-section');
     hide('generate-section');
@@ -581,6 +584,7 @@ function applyStateUnresolvable(errorMsg) {
     show('key-message');
     setMessage(errorMsg, 'warning');
     show('purge-btn');
+    hide('key-export');
     hide('key-divider');
     hide('upload-section');
     hide('generate-section');
@@ -600,6 +604,7 @@ function applyStateValid(data) {
         document.getElementById('modulus-bits').textContent = `${data.modulus_bits} bits`;
     }
     show('purge-btn');
+    show('key-export');
     show('key-divider');
     hide('upload-section');
     hide('generate-section');

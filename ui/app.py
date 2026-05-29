@@ -440,6 +440,38 @@ def api_session_purge_keys():
 # ---------------------------------------------------------------------------
 
 
+@app.route("/api/session/download/private")
+def api_download_private():
+    """Download the session private key file."""
+    path = _private_key_path()
+    if not path:
+        return _err("No private key loaded in this session.", 404)
+    with open(path) as f:
+        data = f.read()
+    from flask import Response as _Response
+    return _Response(
+        data,
+        mimetype="application/json",
+        headers={"Content-Disposition": "attachment; filename=private.key"}
+    )
+
+
+@app.route("/api/session/download/public")
+def api_download_public():
+    """Download the session public key file."""
+    path = _public_key_path()
+    if not path:
+        return _err("No public key loaded in this session.", 404)
+    with open(path) as f:
+        data = f.read()
+    from flask import Response as _Response
+    return _Response(
+        data,
+        mimetype="application/json",
+        headers={"Content-Disposition": "attachment; filename=public.json"}
+    )
+
+
 @app.route("/api/bundle/candidates", methods=["POST"])
 def api_bundle_candidates():
     """
