@@ -13,55 +13,78 @@ A proof-of-concept RSA encryption tool that uses Pokémon metadata as the public
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-username/pokedex-rsa.git
+git clone https://github.com/jdhunterae/pokedex-rsa.git
 cd pokedex-rsa
 ```
 
 ### 2. Run the environment setup script
 
-The setup script handles everything in one step: creates a Python virtual environment if one doesn't exist, activates it in your current shell, and installs all dependencies from `requirements.txt`. It also creates the `data/` directory if it's missing.
+Creates a Python virtual environment if one doesn't exist, activates it in your current shell, and installs all dependencies. Also creates the `data/` directory if missing.
 
 ```bash
 source setup.sh
 ```
 
-> ⚠️ The script must be run with `source`, not `bash setup.sh`. Using `source` ensures the virtual environment activation persists in your current terminal session. Running it directly as a script would activate the venv inside a subprocess and lose it immediately on exit.
+> ⚠️ Must be run with `source`, not `bash setup.sh`, so the venv activation persists in your current terminal session.
 
-### 3. Seed the local database
+### 3. Install the package
 
-The tool runs entirely offline after the initial seed. Run the seeder once to populate the local SQLite database from [PokeAPI](https://pokeapi.co). The starters option is recommended as a starting point:
+Registers the `poke-rsa` (CLI) and `poke-rsa-ui` (web UI) entry points:
 
 ```bash
-python scripts/seed_db.py --starters
+pip install -e ".[ui]"
 ```
 
-See the [Database Seeder](#database-seeder) section below for the full list of seeding options.
+### 4. Seed the local database
+
+The tool runs entirely offline after the initial seed. You can seed the database in two ways:
+
+**Option A — Web UI (recommended):** Launch the UI without a database and it will open a setup page automatically:
+
+```bash
+poke-rsa-ui
+```
+
+**Option B — Command line:**
+
+```bash
+python scripts/seed_db.py --starters   # ~84–90 Pokémon, recommended starting point
+python scripts/seed_db.py --gen 1      # Gen 1 only
+python scripts/seed_db.py              # full national Pokédex (~1025 + variants)
+```
+
+See the [Database Seeder](#database-seeder) section for the full list of options.
 
 ### Returning to the project later
 
-The setup script is safe to re-run at any time. If the virtual environment already exists it will skip creation and go straight to activation and dependency installation. Just `source` it again at the start of each session:
-
 ```bash
-source setup.sh
+source setup.sh        # re-activate venv and install any new dependencies
+poke-rsa-ui            # launch the web UI
+# or
+poke-rsa --help        # use the CLI
 ```
 
-Or activate the venv manually if you prefer:
+---
+
+## Launching the Web UI
 
 ```bash
-source .venv/bin/activate
+poke-rsa-ui
 ```
+
+Opens at `http://127.0.0.1:5000`. If no database is found, the app redirects to a setup page where you can choose a seeding option and initialise the database without leaving the browser.
+
+**GitHub Codespaces:** the Ports tab in VS Code will show port 5000 with a forwarded URL (`https://<codespace-name>-5000.app.github.dev`) once the server starts.
 
 ---
 
 ## Database Seeder
 
-The tool runs entirely offline after setup. The seeder script populates a local SQLite database from [PokeAPI](https://pokeapi.co) — run it once before using the encryption tool.
-
 Each Pokémon record stores: name, form, primary type, secondary type, height (m), weight (kg), base stat total, generation of first appearance, and Pokédex color.
 
 ### Regional variants
 
-Regional variants (Alolan, Galarian, Hisuian, Paldean) are stored as distinct records alongside their base forms using a composite `(id, form)` primary key. For example, the Cyndaquil line produces four records rather than three:
+Regional variants (Alolan, Galarian, Hisuian, Paldean) are stored as distinct records using a composite `(id, form)` primary key. For example, the Cyndaquil line produces four records:
 
 ```
 (155, default)  Cyndaquil        [Fire]
@@ -70,66 +93,24 @@ Regional variants (Alolan, Galarian, Hisuian, Paldean) are stored as distinct re
 (157, hisui)    Typhlosion-Hisui [Fire / Ghost]
 ```
 
-This maximises the pool of unique metadata combinations available to the resolver and ensures that variants produce distinct primes from their base forms during key derivation. Cosmetic-only forms (Mega, G-Max, etc.) are excluded as they share types and stats with their base form and would pollute the resolver pool.
+Cosmetic-only forms (Mega, G-Max, etc.) are excluded as they share types and stats with their base form.
 
 ### Commands
 
-**Seed all starter lines (recommended starting point)**
-
-Pulls all evolution stages for every generation's starters, including regional variants. Yields approximately 84–90 records across all nine gens — enough to meaningfully stress-test the resolver's uniqueness validation.
-
 ```bash
-python scripts/seed_db.py --starters
-```
+python scripts/seed_db.py --starters          # all starter lines + variants (~84–90 Pokémon)
+python scripts/seed_db.py --gen 1             # Gen 1 only
+python scripts/seed_db.py --gen 1 --gen 2     # Gen 1 and Gen 2
+python scripts/seed_db.py                     # full national Pokédex + variants
 
-**Seed a specific generation**
-
-```bash
-python scripts/seed_db.py --gen 1
-```
-
-**Seed multiple generations**
-
-```bash
-python scripts/seed_db.py --gen 1 --gen 2
-```
-
-**Seed the entire national Pokédex**
-
-Pulls all ~1025 species plus regional variants. Expect this to take several minutes due to API rate limiting.
-
-```bash
-python scripts/seed_db.py
-```
-
-**Skip regional variants**
-
-Any of the above commands can be combined with `--no-variants` to pull base forms only.
-
-```bash
+# Skip regional variants on any of the above
 python scripts/seed_db.py --starters --no-variants
-python scripts/seed_db.py --gen 1 --no-variants
-python scripts/seed_db.py --no-variants
+
+# Wipe and re-seed (prompts for confirmation)
+python scripts/seed_db.py --clean --starters
 ```
 
-### Append behavior
-
-By default the seeder skips any Pokémon already present in the database. This means partial runs are safe to resume, and you can layer generations incrementally:
-
-```bash
-python scripts/seed_db.py --gen 1
-python scripts/seed_db.py --gen 2   # adds Gen 2 without re-fetching Gen 1
-```
-
-### Wiping the database
-
-Use `--clean` to wipe the database before seeding. You will be prompted to confirm.
-
-```bash
-python scripts/seed_db.py --clean             # wipe, then pull everything
-python scripts/seed_db.py --clean --gen 1     # wipe, then pull Gen 1 only
-python scripts/seed_db.py --clean --starters  # wipe, then pull starter lines
-```
+By default the seeder skips Pokémon already in the database, so partial runs are safe to resume and you can layer generations incrementally.
 
 > `--gen` and `--starters` are mutually exclusive.
 
@@ -140,16 +121,25 @@ python scripts/seed_db.py --clean --starters  # wipe, then pull starter lines
 ```
 pokedex-rsa/
 ├── data/
-│   └── pokemon.db          # Local SQLite database (not committed)
+│   └── pokemon.db              # Local SQLite database (not committed)
 ├── scripts/
-│   └── seed_db.py          # One-time database seeder
+│   └── seed_db.py              # Database seeder
 ├── pokedex_rsa/
-│   ├── models/             # Pokemon dataclass, DB access, crypto primitives
-│   ├── controllers/        # Orchestrates keygen, encrypt, decrypt
-│   └── views/              # CLI interface
+│   ├── models/                 # Pokemon dataclass, DB access, crypto primitives
+│   ├── controllers/            # Orchestrates keygen, encrypt, decrypt, validate
+│   └── views/                  # CLI interface
+├── ui/
+│   ├── app.py                  # Flask application and API routes
+│   ├── serve.py                # poke-rsa-ui entry point
+│   ├── requirements.txt        # UI-specific dependencies
+│   ├── templates/              # index.html, setup.html
+│   └── static/
+│       ├── css/style.css
+│       └── js/                 # app.js, keys.js, setup.js
 ├── tests/
 ├── requirements.txt
-└── README.md
+├── setup.py
+└── setup.sh
 ```
 
 ---
@@ -158,46 +148,32 @@ pokedex-rsa/
 
 ### Overview
 
-Pokedex RSA is a demonstration of RSA encryption principles where Pokémon metadata serves as the public key exchange mechanism. The two core ideas are:
+Pokedex RSA demonstrates RSA encryption where Pokémon metadata serves as the public key exchange mechanism:
 
-1. A Pokémon's name can be deterministically hashed into a large prime number
-2. Instead of sharing that prime directly, the sender shares a *metadata puzzle* — a set of attributes that uniquely identifies the Pokémon in the local database
-
-The recipient solves the puzzle, recovers the name, re-derives the prime, and uses it to decrypt the message.
+1. A Pokémon's name is deterministically hashed into a large prime number
+2. Instead of sharing the prime directly, the sender shares a *metadata puzzle* — a set of attributes that uniquely identifies the Pokémon in the local database
+3. The recipient resolves the puzzle, recovers the name, re-derives the prime, and decrypts the message
 
 ---
 
 ### Prime Derivation
 
-The foundation of the system is a deterministic, collision-resistant mapping from Pokémon name to prime number.
-
-**Why not just use the Pokédex number?**
-Mapping `#0001 → 2nd prime`, `#0002 → 3rd prime`, etc. produces collisions for regional variants — Kantonian and Hisuian Typhlosion both share Pokédex number 0157, so they would derive the same prime. This breaks the uniqueness guarantee the cryptosystem depends on.
-
-**The solution: SHA-256 name hashing**
-
-Each Pokémon's PokeAPI slug (e.g. `typhlosion`, `typhlosion-hisui`) is UTF-8 encoded and passed through SHA-256, producing a unique 256-bit integer. That integer becomes the starting point for a prime search:
+Each Pokémon's PokeAPI slug (e.g. `typhlosion`, `typhlosion-hisui`) is UTF-8 encoded and passed through SHA-256, producing a unique 256-bit integer. That integer seeds a forward prime search:
 
 ```
 hash   = SHA-256("typhlosion-hisui")  →  256-bit integer H
 prime  = next_prime(H)                →  first prime ≥ H
 ```
 
-The forward walk to the next prime uses the Miller-Rabin probabilistic primality test (20 rounds), which provides a false-positive probability of less than 4⁻²⁰ ≈ 10⁻¹² per candidate — sufficient for this application.
+The prime search uses the Miller-Rabin probabilistic primality test (20 rounds, false-positive probability < 4⁻²⁰ ≈ 10⁻¹²).
 
-**Why this guarantees uniqueness**
+**Why not use the Pokédex number?** Regional variants share a Pokédex number — Kantonian and Hisuian Typhlosion are both #0157 — so a number-based mapping would derive the same prime for both. SHA-256 of the name slug is always unique.
 
-SHA-256 is collision-resistant by design: finding two inputs that produce the same hash is computationally infeasible. Two different Pokémon names therefore produce starting points separated by an astronomically large distance on the number line. The average gap between 256-bit primes is approximately 177 numbers (by the prime number theorem), so each name's prime search terminates within a small local neighbourhood that cannot overlap with any other name's neighbourhood.
-
-**Key size**
-
-Derived primes are approximately 256 bits. The RSA modulus `n = p × q` is therefore approximately 512 bits. 512-bit RSA is not considered secure by modern standards — it has been practically factored since 1999. This is an intentional and documented limitation: the prime pool is bounded by the size of the Pokédex, and this project demonstrates RSA principles rather than providing a production cryptosystem. The architecture and mathematics are sound; only the key size falls short of modern security requirements.
+**Key size:** Derived primes are ~256 bits, giving a ~512-bit modulus. 512-bit RSA is not secure by modern standards (factored in practice since 1999). This is an intentional limitation — the prime pool is bounded by the Pokédex size.
 
 ---
 
 ### Key Generation
-
-Two distinct Pokémon provide the two primes:
 
 ```
 p = derive_prime("bulbasaur")
@@ -205,83 +181,59 @@ q = derive_prime("charmander")
 n = p × q                          # RSA modulus (~512 bits)
 φ(n) = (p-1)(q-1)                  # Euler's totient
 e = 65537                          # public exponent (Fermat prime F₄)
-d = e⁻¹ mod φ(n)                   # private exponent (modular inverse)
+d = e⁻¹ mod φ(n)                   # private exponent
 ```
-
-The public exponent `65537` (2¹⁶ + 1) is the standard choice in RSA implementations. It is a Fermat prime, which means it has a short binary representation (exactly two 1-bits), making modular exponentiation fast. It is also large enough to resist small-exponent attacks that affect values like `e=3`.
 
 ---
 
 ### Public Key Exchange
 
-The sender does not share the prime numbers or the Pokémon names. Instead, they share a **metadata bundle** — a set of Pokémon attributes that uniquely identifies each Pokémon in the local database:
+Instead of sharing `p` and `q`, the sender shares a **metadata bundle** that uniquely identifies each Pokémon:
 
 ```json
 {
-  "pokemon_p": { "type_primary": "grass", "type_secondary": "poison", "color": "green" },
-  "pokemon_q": { "type_primary": "fire",  "generation": 1,           "height": 0.6    }
+  "bundle_p": { "base_stat_total": 308, "weight": 8.1 },
+  "bundle_q": { "type_primary": "fire", "type_secondary": "flying", "generation": 1 }
 }
 ```
 
-The bundle is valid only if each sub-query resolves to exactly one Pokémon. The sender can use any combination of the stored fields — type, height, weight, base stat total, generation, color, form — and is responsible for choosing a combination that is unambiguous. The tool validates uniqueness before accepting a bundle.
-
-**Non-determinism by design**
-
-The same Pokémon can be described by many different valid metadata bundles. Bulbasaur could be identified by `{type_primary: grass, type_secondary: poison}` one time, or by `{color: green, generation: 1, type_secondary: poison}` another time. This means the public key for the same underlying keypair is never identical across sessions, which is a desirable property.
-
-**Resolution**
-
-The recipient queries their local database with each sub-bundle. The resolver enforces strict uniqueness: zero matches or multiple matches both result in an error. Only an exact single match allows decryption to proceed. Both parties must be using a database seeded from the same source (PokeAPI) for resolution to succeed.
+The bundle is auto-constructed from the minimum fields needed to uniquely resolve to one Pokémon. The same Pokémon can be described by many different valid bundles, so the public key is never identical across sessions.
 
 ---
 
 ### Encryption and Decryption
 
-RSA encrypts integers smaller than the modulus `n`. To handle messages of arbitrary length, the plaintext is split into fixed-size byte blocks sized to fit within `n`, and each block is encrypted independently:
+Messages are split into fixed-size byte blocks and each block is encrypted independently:
 
 ```
-block_size = (n.bit_length() // 8) - 1   # safely below n
+block_size = (n.bit_length() // 8) - 1
 
 for each block:
     m = bytes_to_int(block)
-    c = m^e mod n                          # encrypt
-```
+    c = m^e mod n                   # encrypt
 
-Decryption reverses the process:
-
-```
 for each ciphertext integer c:
-    m = c^d mod n                          # decrypt
+    m = c^d mod n                   # decrypt
     block = int_to_bytes(m)
-
-plaintext = join(all blocks)
 ```
 
-Block-based encryption means there is no practical message length limit, and the block size scales automatically as the Pokédex grows and primes become larger in future generations.
+Block-based encryption means there is no practical message length limit.
 
 ---
 
-## Usage
+## CLI Usage
 
 ### Installation
-
-After running `source setup.sh`, install the CLI entry point:
 
 ```bash
 pip install -e .
 ```
 
-This registers `poke-rsa` as a command in your virtual environment.
-
----
+Registers `poke-rsa` in your virtual environment.
 
 ### Commands
 
-#### `count` — check how many Pokémon match a bundle
-
-Before generating a keypair, use `count` to understand how much a metadata
-filter restricts the key pool. With no bundle, returns the total count of all
-Pokémon in your database.
+#### `count` — check pool size before generating
 
 ```bash
 poke-rsa count
@@ -289,139 +241,46 @@ poke-rsa count
 
 poke-rsa count --bundle '{"type_primary":"fire"}'
 # 64 Pokemon match {"type_primary": "fire"} (out of 1025 total)
-
-poke-rsa count --bundle '{"type_primary":"fire","generation":1}'
-# 3 Pokemon match {"type_primary": "fire", "generation": 1} (out of 1025 total)
 ```
 
----
-
-#### `validate` — confirm a bundle resolves to exactly one Pokémon
-
-Use `validate` when you need a deterministic keypair and want to confirm your
-bundle uniquely identifies a single Pokémon before running `keygen`.
+#### `validate` — confirm a bundle is unique
 
 ```bash
 poke-rsa validate --bundle '{"type_primary":"grass","base_stat_total":308}'
 # ✓ Bundle resolves to: #0495 Snivy (grass, Gen 5, 0.6m, 8.1kg, BST 308)
 ```
 
-If the bundle is ambiguous, the tool tells you which fields to add:
-
-```bash
-poke-rsa validate --bundle '{"type_primary":"grass","type_secondary":"poison"}'
-# ✗ The bundle matched 3 Pokemon. Add more fields to narrow it down.
-#   Try adding: ['height', 'weight', 'base_stat_total', 'id']
-```
-
----
-
 #### `keygen` — generate a keypair
 
-Bundle flags are optional. Three modes are supported:
+Bundle flags are optional. Three modes per slot:
 
 | Mode | Description |
 |---|---|
-| No bundles | Fully random — two Pokémon chosen from the entire database |
-| Partial bundle | Restricted random — chosen from the matching pool |
-| Exact bundle | Deterministic — bundle must resolve to exactly one Pokémon |
-
-Both `--bundle-p` and `--bundle-q` can independently use any mode.
-
-**Fully random** — no bundles required:
+| No bundle | Fully random from entire database |
+| Partial bundle | Random from matching pool |
+| Exact bundle | Deterministic — bundle must resolve to one Pokémon |
 
 ```bash
-poke-rsa keygen --fileless
-
-# Generating keypair (p: random / q: random)...
-#   Selected: Decidueye × Empoleon
-#
-# Private Key (keep secret)
-#   {"n": 3141592...,"d": 2718281...}
-#
-# Public Key (share with recipient)
-#   {"bundle_p": {"base_stat_total": 530, "weight": 36.6}, "bundle_q": {...}, "e": 65537}
+poke-rsa keygen                            # fully random, writes private.key + public.json
+poke-rsa keygen --fileless                 # fully random, prints to terminal
+poke-rsa keygen --bundle-p '{"type_primary":"water"}' --fileless
 ```
-
-**Restricted random** — partial bundle narrows the pool, one is picked at random:
-
-```bash
-poke-rsa keygen --fileless   --bundle-p '{"type_primary":"water"}'   --bundle-q '{"type_primary":"fire","generation":1}'
-
-# Generating keypair (p: filter {'type_primary': 'water'} / q: filter {'type_primary': 'fire', 'generation': 1})...
-#   Selected: Mudkip × Charizard
-```
-
-**Deterministic** — exact bundles, same pair every time:
-
-```bash
-poke-rsa keygen   --bundle-p '{"type_primary":"grass","base_stat_total":308}'   --bundle-q '{"type_primary":"fire","generation":1,"type_secondary":"flying"}'
-
-# Generating keypair (p: filter {...} / q: filter {...})...
-#   Selected: Snivy × Charizard
-#
-# ✓ Private key → private.key
-# ✓ Public key  → public.json
-#
-# Key Summary
-#   Pokemon P: #0495 Snivy (grass, Gen 5, 0.6m, 8.1kg, BST 308)
-#   Pokemon Q: #0006 Charizard (fire/flying, Gen 1, 1.7m, 90.5kg, BST 534)
-#   Modulus size: 510 bits
-```
-
-**`--verbose`** — writes files and also prints key content to terminal.
-
-**`--fileless`** — prints keys to terminal only, no files written. Output is
-directly pasteable as input to the next command.
-
-> In all modes the public key bundle is auto-constructed from the selected
-> Pokémon's metadata — you never need to manually specify the public bundle
-> fields. The tool always tells you which Pokémon were chosen.
-
----
 
 #### `encrypt` — encrypt a message
 
-**File mode** — reads `public.json`, writes `encrypted.json`:
-
 ```bash
-poke-rsa encrypt --message "Hello, Trainer!"
-
-# Encrypting message...
-# ✓ Encrypted message → encrypted.json
-#
-# Encryption Summary
-#   Blocks: 1
-#   Message length: 15 characters
+poke-rsa encrypt --message "Hello, Trainer!"           # reads public.json, writes encrypted.json
+poke-rsa encrypt --fileless --message "Hello!" --public-key '<paste public bundle>'
 ```
-
-**Fileless** — paste the public key output from `keygen --fileless`:
-
-```bash
-poke-rsa encrypt --fileless   --message "Hello, Trainer!"   --public-key '{"bundle_p":{...},"bundle_q":{...},"e":65537}'
-```
-
----
 
 #### `decrypt` — decrypt a message
 
-**File mode** — reads `private.key` and `encrypted.json`, writes `plaintext.txt`:
-
 ```bash
-poke-rsa decrypt
-
-# ✓ Decrypted: "Hello, Trainer!"
+poke-rsa decrypt                           # reads private.key + encrypted.json, writes plaintext.txt
+poke-rsa decrypt --fileless --private-key '<paste>' --encrypted '<paste>'
 ```
 
-**Fileless** — paste private key and encrypted message from previous outputs:
-
-```bash
-poke-rsa decrypt --fileless   --private-key '{"n":5232...,"d":5115...}'   --encrypted '{"ciphertext":[...],"public_bundle":{...}}'
-```
-
----
-
-### Output modes summary
+#### Output modes
 
 | Flag | Files written | Terminal output |
 |---|---|---|

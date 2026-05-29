@@ -11,14 +11,13 @@ main                  # stable, working code only
     ├── phase/4-cli
     ├── phase/5-polish
     ├── phase/5.5-core-updates
-    └── phase/6-ui
+    ├── phase/6-ui
+    └── phase/7-ui-polish
 ```
 
 Each phase branch cuts from `develop`, gets merged back into `develop` when complete.
 `develop` merges into `main` at the end of each phase once verified stable.
 `main` always represents a working, if incomplete, state of the project.
-
-> The seeder script and project scaffolding (setup.sh, .gitignore, README, requirements.txt) are committed directly to `main` before cutting `develop`, as they are setup infrastructure rather than application code.
 
 ---
 
@@ -33,9 +32,6 @@ Each phase branch cuts from `develop`, gets merged back into `develop` when comp
 - [x] `.gitignore`
 - [x] `setup.sh` — virtual environment setup script
 - [x] `scripts/seed_db.py` — PokeAPI seeder with `--gen`, `--starters`, `--clean`, `--no-variants` flags
-  - Composite `(id, form)` primary key to support regional variants as distinct records
-  - Variants (Alolan, Galarian, Hisuian, Paldean) included by default; cosmetic forms excluded
-  - Evolution chain resolution discovers variants automatically via species `varieties` endpoint
 - [x] `README.md` — setup and seeder documentation
 - [x] `ROADMAP.md` — this document
 
@@ -45,14 +41,8 @@ Each phase branch cuts from `develop`, gets merged back into `develop` when comp
 >
 > Branch: `phase/1-data-layer` → merge into `develop`
 
-- [x] `pokedex_rsa/models/pokemon.py`
-  - Pokemon dataclass
-  - DB connection and access methods
-  - CRUD helpers for querying by field values
-- [x] `pokedex_rsa/models/resolver.py`
-  - Accepts a metadata bundle (dict of field/value pairs)
-  - Queries the database for matching Pokemon
-  - Returns exactly one match, or raises on zero or multiple matches
+- [x] `pokedex_rsa/models/pokemon.py` — Pokemon dataclass, DB access, `find_by()`
+- [x] `pokedex_rsa/models/resolver.py` — metadata query → unique Pokemon or raise
 - [x] `tests/test_pokemon.py`
 - [x] `tests/test_resolver.py`
 
@@ -62,11 +52,7 @@ Each phase branch cuts from `develop`, gets merged back into `develop` when comp
 >
 > Branch: `phase/2-crypto` → merge into `develop`
 
-- [x] `pokedex_rsa/models/crypto.py`
-  - SHA-256 name hashing → deterministic prime derivation via Miller-Rabin prime search
-  - RSA key generation (`n`, `e=65537`, `d`) from two derived primes
-  - Block-based `encrypt(message, public_key)` — arbitrary message length
-  - Block-based `decrypt(ciphertext, private_key, public_key)`
+- [x] `pokedex_rsa/models/crypto.py` — SHA-256 prime derivation, RSA keygen, block encrypt/decrypt
 - [x] `tests/test_crypto.py`
 
 ---
@@ -75,11 +61,7 @@ Each phase branch cuts from `develop`, gets merged back into `develop` when comp
 >
 > Branch: `phase/3-controller` → merge into `develop`
 
-- [x] `pokedex_rsa/controllers/encryption_controller.py`
-  - `generate_keypair()` — two resolved bundles → keypair + metadata public key
-  - `encrypt(message, public_key_bundle)`
-  - `decrypt(ciphertext, private_key, public_key_bundle)`
-  - Error handling for ambiguous or unresolvable metadata queries
+- [x] `pokedex_rsa/controllers/encryption_controller.py` — keygen, encrypt, decrypt, validate
 - [x] `tests/test_encryption_controller.py`
 
 ---
@@ -88,11 +70,8 @@ Each phase branch cuts from `develop`, gets merged back into `develop` when comp
 >
 > Branch: `phase/4-cli` → merge into `develop`
 
-- [x] `pokedex_rsa/views/cli.py`
-  - `keygen`, `encrypt`, `decrypt`, `validate` commands
-  - File mode, `--verbose`, and `--fileless` output modes
-- [x] `setup.py` — registers `poke-rsa` CLI entry point
-- [x] `requirements.txt` — updated with `click>=8.0.0`
+- [x] `pokedex_rsa/views/cli.py` — `keygen`, `encrypt`, `decrypt`, `validate`, `count` commands
+- [x] `setup.py` — registers `poke-rsa` and `poke-rsa-ui` entry points
 - [x] Smoke tested across all output modes
 
 ---
@@ -102,159 +81,38 @@ Each phase branch cuts from `develop`, gets merged back into `develop` when comp
 > Branch: `phase/5-polish` → merge into `develop` → merge into `main`
 
 - [x] `tests/test_cli.py` — 45 CLI input validation and error path tests
-  - Found and fixed real bug: invalid field names in `validate` raised unhandled `ValueError`
 - [x] README usage section with verified terminal output examples
 - [x] `.gitignore` updated with CLI output files
-- [x] ROADMAP updated to reflect completed state
 
 ---
 
-### Phase 5.5 — Core Updates
+### Phase 5.5 — Core Updates `[complete]`
 >
 > Branch: `phase/5.5-core-updates` → merge into `develop`
 
-Prepares the core library and CLI for the web UI. The UI requires random and
-restricted key generation — the current controller only supports fully resolved
-bundles. This phase updates the controller, adds auto-bundle construction, and
-makes CLI bundle flags optional before any UI work begins.
-
-#### Controller updates (`encryption_controller.py`)
-
-- [ ] Random keygen — `generate_keypair()` accepts optional partial bundles
-  - No bundle provided → pick randomly from entire DB
-  - Partial bundle provided → pick randomly from matching pool
-  - Exact unique bundle provided → existing behavior (resolve to one Pokemon)
-- [ ] `_build_minimal_bundle(pokemon)` — auto-construct the tightest unique
-      metadata bundle for a randomly selected Pokemon
-  - Tries field combinations in order of distinctiveness until one resolves uniquely
-  - Used to produce the shareable public key when the user did not specify a bundle
-- [ ] `count_candidates(partial_bundle)` — return the number of Pokemon matching
-      a partial bundle without resolving to a unique one
-  - Exposes `len(resolver.candidates(bundle))` cleanly for the UI counter
-- [ ] `random_pokemon(partial_bundle)` — select one Pokemon at random from the
-      matching pool, used internally by random keygen
-
-#### CLI updates (`cli.py`)
-
-- [ ] `--bundle-p` / `--bundle-q` become optional on `keygen`
-  - Omitted → fully random selection
-  - Partial bundle (multiple matches) → restricted random selection
-  - Exact bundle (one match) → existing exact behavior
-- [ ] `keygen` output always shows which Pokemon were selected, regardless of
-      whether the user specified bundles or let the tool choose
-- [ ] Update `--help` text to reflect optional bundle flags
-- [ ] Add `count` command — accepts a partial bundle, returns match count
-
-  ```bash
-  poke-rsa count --bundle '{"type_primary":"grass"}'
-  # 174 Pokemon match this bundle (out of 1025 total)
-  ```
-
-#### Test updates
-
-- [ ] `tests/test_encryption_controller.py` — new tests for random keygen paths
-  - Random with no bundle produces valid keypair
-  - Restricted random with partial bundle picks from correct pool
-  - Auto-bundle always produces a uniquely resolvable result
-  - `count_candidates` returns correct counts
-- [ ] `tests/test_cli.py` — update tests that assume `--bundle-p/q` are required
-  - `keygen` with no bundles succeeds
-  - `keygen` with partial bundles (multiple matches) succeeds
-  - `count` command happy path and error paths
+- [x] Random / restricted keygen — `generate_keypair()` accepts optional partial bundles
+- [x] `_build_minimal_bundle()` — auto-constructs tightest unique public bundle
+- [x] `count_candidates()` — exposes pool size for UI filter counter
+- [x] `list_candidates()` — returns Pokemon objects for autocomplete
+- [x] `validate_keypair()` — checks n = p×q against private key n
+- [x] CLI `keygen` bundles made optional; `count` command added
+- [x] 221 tests passing
 
 ---
 
-### Phase 6 — Web UI
+### Phase 6 — Web UI `[complete]`
 >
 > Branch: `phase/6-ui` → merge into `develop` → merge into `main`
 
-A minimal single-page web interface living in `ui/` within the main repo.
-Imports directly from `pokedex_rsa` as a local dependency. Does not replace
-the CLI — provides an accessible alternative for demonstration purposes.
-
-#### Session model
-
-- Private and public key files stored in a temp directory scoped to the session ID
-- User never sees raw key content — keys are loaded/generated and quietly held
-- User can replace or purge session keys at any time
-
-#### Interface — main page (`/`)
-
-Google Translate-style two-panel layout:
-
-- **Left panel** — plaintext input
-- **Right panel** — encrypted output (paste encrypted text here to decrypt)
-- Direction is determined by which panel was last edited
-- Live update with 800ms debounce after last keystroke — no explicit button
-- Both panels disabled and show prompt if no keys are loaded
-
-#### Interface — key management panel
-
-- Drag-and-drop or file picker for uploading existing `private.key` / `public.json`
-- Generate new keypair inline:
-  - Optional filter fields via dropdowns (type, generation, color, form)
-  - Live counter showing how many Pokemon match current filters
-    (e.g. "174 Pokemon match · out of 1025 total")
-  - Generates randomly from matching pool — user sees which Pokemon were chosen
-  - Auto-uploads generated keys to session immediately
-- Purge / replace keys button
-
-#### Interface — setup page (`/setup`)
-
-Shown instead of main UI when `data/pokemon.db` is missing or empty:
-
-- Seeding options: starters only, specific generations, or full dex
-- Progress feedback while seeder runs
-- Redirects to main UI on completion
-
-#### Planned deliverables
-
-- [ ] `ui/app.py` — Flask application and API routes
-- [ ] `ui/templates/index.html` — main single-page UI
-- [ ] `ui/templates/setup.html` — DB initialization screen
-- [ ] `ui/static/css/style.css`
-- [ ] `ui/static/js/app.js` — main UI logic and live update listeners
-- [ ] `ui/static/js/keys.js` — key management panel
-- [ ] `ui/static/js/setup.js` — DB initialization page
-- [ ] `ui/requirements.txt` — Flask and UI-specific dependencies
-- [ ] Single-step launch — `poke-rsa-ui` entry point or `--serve` flag on `setup.sh`
-  - Checks DB on startup, redirects to `/setup` if empty
-  - Seeds check before serving first request
-- [ ] README updated with UI setup and usage instructions
-
-#### API routes
-
-```
-GET  /                      → main UI (or redirect to /setup if DB empty)
-GET  /setup                 → DB initialization page
-POST /api/setup/seed        → trigger seeder with options, return job ID
-GET  /api/setup/status      → poll seeder progress
-
-POST /api/session/keys      → upload key files, store in temp dir
-POST /api/session/keygen    → random or restricted keygen, auto-store in temp dir
-DELETE /api/session/keys    → purge session keys and temp dir
-
-POST /api/bundle/count      → count matching Pokemon for a partial bundle
-POST /api/bundle/validate   → validate a bundle resolves to exactly one Pokemon
-
-POST /api/encrypt           → encrypt with session public key
-POST /api/decrypt           → decrypt with session private key
-```
-
----
-
-## Stretch Goals
-
-Ideas to revisit after Phase 6, if the project warrants it.
-
-- **Intentional ambiguity** — allow a sender to craft a public key that matches
-  multiple Pokémon, requiring a shared secret hint to narrow down. Better suited
-  to a file-encryption use case than the current message-encryption model.
-- **Separate UI repo** — if the web UI grows significantly, splitting `ui/` into
-  its own repo with `pokedex-rsa` as a pip dependency is straightforward.
-- **P2P messaging** — a minimal peer-to-peer messaging layer using the encryption
-  engine. Would require a user profile system where each user's public bundle is
-  shareable on request — the natural evolution of the current key exchange model.
+- [x] `ui/app.py` — Flask application with full API route set
+- [x] `ui/templates/index.html` — main single-page UI
+- [x] `ui/templates/setup.html` — DB initialization screen with progress polling
+- [x] `ui/static/css/style.css` — retro terminal × Pokédex aesthetic
+- [x] `ui/static/js/app.js` — live encrypt/decrypt with 800ms debounce
+- [x] `ui/static/js/keys.js` — key management state machine
+- [x] `ui/static/js/setup.js` — DB seeder with polling progress
+- [x] `ui/serve.py` — `poke-rsa-ui` entry point with DB check on launch
+- [x] `ui/requirements.txt`
 
 ---
 
@@ -262,95 +120,51 @@ Ideas to revisit after Phase 6, if the project warrants it.
 >
 > Branch: `phase/7-ui-polish` → merge into `develop` → merge into `main`
 
-Quality-of-life improvements to the web UI identified during Phase 6 usage.
-None of these change core functionality — all encryption, decryption, and key
-management logic remains in the existing layers.
-
 #### Key panel UX
 
-- [x] **Purge button positioning** — move "Purge Session Keys" to immediately
-      below the key status / key info area, not below the generate and upload
-      sections. The purge action belongs with the loaded-key display, not buried
-      under unrelated controls.
-- [x] **Hide generate and upload when keys are loaded** — collapse the "Generate
-      New Keys" and "Upload Existing Keys" sections when a keypair is active.
-      The user must purge before generating or uploading new keys. This prevents
-      accidental key replacement mid-session and clarifies the intended workflow.
-- [ ] **Specific Pokémon selection in keygen** — extend the filter UI to support
-      narrowing down to a single Pokémon for deterministic key generation. The
-      current type + generation dropdowns are not always enough to isolate one
-      Pokémon. Options to consider:
-      - Add additional filter fields (color, BST range, weight, form)
-      - Add a live search / autocomplete by name
-      - Show the current candidate list so the user can see what they're picking from
-      This is important for the use case where a recipient needs to re-derive the
-      exact same keypair to decrypt a message from a known sender.
+- [x] **Purge button positioning** — moved directly below key status / key info
+- [x] **Hide generate and upload when keys are loaded** — sections collapse when
+      a keypair is active; user must purge before generating or uploading new keys
+- [x] **Full key management state machine** — four states: empty, partial,
+      mismatch, unresolvable, valid; each with appropriate indicator, message,
+      and available actions
+- [x] **Smart upload validation** — misrouted files detected by structure
+      (public.json in private slot and vice versa) with clear redirect message;
+      corrupt/unrecognised files produce specific errors. Redirect offer not
+      implemented — warning is sufficient given the all-or-nothing purge model.
+- [x] **Key export / download** — `↓ private.key` and `↓ public.json` buttons
+      appear in the loaded state; served via `GET /api/session/download/*`
+- [x] **Full filter UI for keygen** — dynamic filter rows supporting all 8
+      metadata fields; search-with-autocomplete for direct Pokémon selection;
+      lock state disables filters once a Pokémon is chosen; generate button
+      guard prevents impossible pool combinations
 
 #### File drag-and-drop on text panels
 
-- [ ] **Drag-and-drop `encrypted.json` onto the ciphertext panel** — user can
-      drag an exported JSON file directly onto the right panel instead of opening
-      the file and copy-pasting. Typing and paste should continue to work as-is.
-- [ ] **Drag-and-drop `.txt` onto the plaintext panel** — user can drag a plain
-      text file onto the left panel to load it for encryption. Typing and paste
-      should continue to work as-is.
-
-#### Key export / download
-
-- [ ] **Download private key** — button to download the current session's
-      `private.key` file so it can be preserved between sessions.
-- [ ] **Download public key** — button to download `public.json` so it can be
-      shared with senders or stored for reference.
-      These are essential for any workflow where the user generates keys in one
-      session and needs to decrypt messages received later.
+- [ ] **Drag-and-drop `encrypted.json` onto the ciphertext panel**
+- [ ] **Drag-and-drop `.txt` onto the plaintext panel**
 
 #### Database management
 
-- [ ] **Reset database from UI** — add a "Reset Database" option accessible
-      from the main UI (e.g. a small settings or admin link in the header or
-      footer). Clicking it shows a confirmation dialog: *"This will permanently
-      delete your Pokémon database. This cannot be undone. Are you sure?"*
-      On confirmation, the server deletes `data/pokemon.db` and redirects to
-      `/setup` so the user can re-seed with different options.
-      - Implementation note: delete the file directly from Flask — do NOT invoke
-        `seed_db.py --clean` since that blocks on an `input()` confirmation
-        prompt that cannot be answered from a subprocess.
-      - New route: `DELETE /api/setup/database`
-
-#### Key upload error handling
-
-- [ ] **Smart file validation on upload** — when the user uploads a key file,
-      validate its structure before accepting it and surface specific, actionable
-      errors rather than generic JSON parse failures.
-      - If the user uploads `public.json` to the private key slot: detect that
-        the file contains `bundle_p`/`bundle_q` fields (public key structure)
-        and offer: *"This looks like a public key file. Would you like to load
-        it as your public key instead?"*
-      - If the user uploads `private.key` to the public key slot: detect that
-        the file contains `n`/`d` fields (private key structure) and offer:
-        *"This looks like a private key file. Would you like to load it as
-        your private key instead?"*
-      - If the file is valid JSON but neither structure: *"This file doesn't
-        look like a Pokédex RSA key file. Expected either a private key
-        (containing n and d) or a public key (containing bundle_p and bundle_q)."*
-      - If the file is not valid JSON at all: *"Could not read this file as a
-        key — it may be corrupted or the wrong file type."*
+- [ ] **Reset database from UI** — settings link in header → confirmation dialog
+      → `DELETE /api/setup/database` → redirect to `/setup`
 
 #### Decryption error messaging
 
-- [ ] **Key mismatch on decrypt** — when decryption fails with a cryptic error
-      like `int too big to convert`, attempt to diagnose the cause before
-      surfacing it to the user. Specifically:
-      - Extract the `public_bundle` from the encrypted message
-      - Resolve its `bundle_p` and `bundle_q` Pokemon against the database
-      - Compare against the Pokemon resolved from the session's current public key
-      - If the Pokemon differ: surface a clear message — *"This message was
-        encrypted with different keys (Pokémon A × Pokémon B). Load the
-        matching keys and try again."*
-      - If the Pokemon match but decryption still fails: surface a generic
-        *"Decryption failed — the message may be corrupted."*
-      - If the bundle can't be resolved at all: *"The message's public key
-        cannot be resolved with the current database."*
-      - Implementation note: this check belongs in the Flask `/api/decrypt`
-        route as a pre-flight before passing to the controller, since it needs
-        access to both the session keys and the encrypted message bundle.
+- [ ] **Key mismatch on decrypt** — pre-flight check in `/api/decrypt` that
+      resolves the message's embedded public bundle Pokemon and compares against
+      the session's current keys before attempting decryption; surfaces
+      *"This message was encrypted with different keys"* rather than a raw
+      Python exception
+
+---
+
+## Stretch Goals
+
+- **Intentional ambiguity** — public key that matches multiple Pokémon,
+  requiring a shared secret hint. Better suited to file encryption than the
+  current message model.
+- **Separate UI repo** — split `ui/` into its own repo with `pokedex-rsa`
+  as a pip dependency if the UI grows significantly.
+- **P2P messaging** — peer-to-peer layer using the encryption engine; requires
+  a user profile system where each user's public bundle is shareable on request.
