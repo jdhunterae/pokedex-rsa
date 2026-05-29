@@ -27,17 +27,17 @@
     <!-- ── Main layout ────────────────────────────────────────────── -->
     <main class="app-main">
 
-        <!-- Key management sidebar -->
+        <!-- ── Key management sidebar ─────────────────────────────── -->
         <aside class="key-panel" id="key-panel">
             <div class="panel-label">KEY MANAGEMENT</div>
 
-            <!-- Status indicator -->
-            <div class="key-status" id="key-status">
+            <!-- Status row -->
+            <div class="key-status">
                 <div class="key-status-indicator no-keys" id="key-indicator"></div>
                 <span id="key-status-text">No keys loaded</span>
             </div>
 
-            <!-- Key info (shown when loaded) -->
+            <!-- Key info card — hidden until state 3 validated -->
             <div class="key-info hidden" id="key-info">
                 <div class="key-info-row">
                     <span class="key-info-label">POKÉMON P</span>
@@ -53,84 +53,89 @@
                 </div>
             </div>
 
-            <!-- Purge button — lives directly under key info, visible only when loaded -->
+            <!-- Partial / error message — shown in states 2, mismatch, unresolvable -->
+            <div class="key-message hidden" id="key-message"></div>
+
+            <!-- Purge button — shown whenever anything is loaded -->
             <button class="btn-danger hidden" id="purge-btn" onclick="purgeKeys()">
                 Purge Session Keys
             </button>
 
-            <!-- Divider shown only when keys are loaded -->
             <div class="key-divider hidden" id="key-divider"></div>
 
-            <!-- Generate and upload — hidden when keys are loaded -->
-            <div class="key-actions" id="key-actions">
+            <!-- ── Generate section — hidden when any key is loaded ── -->
+            <div class="key-section" id="generate-section">
+                <div class="section-title">GENERATE NEW KEYS</div>
 
-                <!-- Generate new keys -->
-                <div class="key-section">
-                    <div class="section-title">GENERATE NEW KEYS</div>
-
-                    <div class="filter-group">
-                        <label class="filter-label">
-                            Filter P
-                            <span class="filter-count" id="count-p">— / —</span>
-                        </label>
-                        <div class="filter-row">
-                            <select class="filter-select" id="type-p" onchange="updateCount('p')">
-                                <option value="">Any type</option>
-                            </select>
-                            <select class="filter-select" id="gen-p" onchange="updateCount('p')">
-                                <option value="">Any gen</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="filter-group">
-                        <label class="filter-label">
-                            Filter Q
-                            <span class="filter-count" id="count-q">— / —</span>
-                        </label>
-                        <div class="filter-row">
-                            <select class="filter-select" id="type-q" onchange="updateCount('q')">
-                                <option value="">Any type</option>
-                            </select>
-                            <select class="filter-select" id="gen-q" onchange="updateCount('q')">
-                                <option value="">Any gen</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <button class="btn-primary" id="generate-btn" onclick="generateKeys()">
-                        Generate Keypair
-                    </button>
-                </div>
-
-                <!-- Upload existing keys -->
-                <div class="key-section">
-                    <div class="section-title">UPLOAD EXISTING KEYS</div>
-                    <div class="upload-row">
-                        <label class="upload-label" for="upload-private">
-                            <span>private.key</span>
-                            <input type="file" id="upload-private" accept=".key,.json" onchange="uploadKeys()" />
-                        </label>
-                        <label class="upload-label" for="upload-public">
-                            <span>public.json</span>
-                            <input type="file" id="upload-public" accept=".json" onchange="uploadKeys()" />
-                        </label>
+                <div class="filter-group">
+                    <label class="filter-label">
+                        Filter P
+                        <span class="filter-count" id="count-p">— / —</span>
+                    </label>
+                    <div class="filter-row">
+                        <select class="filter-select" id="type-p" onchange="onFilterChange()">
+                            <option value="">Any type</option>
+                        </select>
+                        <select class="filter-select" id="gen-p" onchange="onFilterChange()">
+                            <option value="">Any gen</option>
+                        </select>
                     </div>
                 </div>
 
+                <div class="filter-group">
+                    <label class="filter-label">
+                        Filter Q
+                        <span class="filter-count" id="count-q">— / —</span>
+                    </label>
+                    <div class="filter-row">
+                        <select class="filter-select" id="type-q" onchange="onFilterChange()">
+                            <option value="">Any type</option>
+                        </select>
+                        <select class="filter-select" id="gen-q" onchange="onFilterChange()">
+                            <option value="">Any gen</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button class="btn-primary" id="generate-btn" onclick="generateKeys()">
+                    Generate Keypair
+                </button>
+                <div class="generate-hint hidden" id="generate-hint"></div>
             </div>
+
+            <!-- ── Upload section — hidden only in state 3 (both loaded + valid) ── -->
+            <div class="key-section" id="upload-section">
+                <div class="section-title">UPLOAD EXISTING KEYS</div>
+                <div class="upload-slots">
+
+                    <label class="upload-slot" for="upload-private" id="slot-private">
+                        <div class="slot-dot empty" id="slot-dot-private"></div>
+                        <span class="slot-name">private.key</span>
+                        <span class="slot-status" id="slot-status-private">— not loaded —</span>
+                        <input type="file" id="upload-private" accept=".key,.json"
+                            onchange="handleUpload('private', this)" />
+                    </label>
+
+                    <label class="upload-slot" for="upload-public" id="slot-public">
+                        <div class="slot-dot empty" id="slot-dot-public"></div>
+                        <span class="slot-name">public.json</span>
+                        <span class="slot-status" id="slot-status-public">— not loaded —</span>
+                        <input type="file" id="upload-public" accept=".json" onchange="handleUpload('public', this)" />
+                    </label>
+
+                </div>
+            </div>
+
         </aside>
 
-        <!-- Encryption panels -->
+        <!-- ── Encryption panels ───────────────────────────────────── -->
         <section class="crypto-panels">
 
-            <!-- Direction indicator -->
             <div class="direction-bar">
                 <span class="direction-label" id="direction-label">— awaiting keys —</span>
             </div>
 
             <div class="panels-row">
-                <!-- Plaintext panel -->
                 <div class="panel" id="panel-plain">
                     <div class="panel-header">
                         <span class="panel-title">PLAINTEXT</span>
@@ -146,12 +151,10 @@
                     </div>
                 </div>
 
-                <!-- Swap indicator -->
                 <div class="panel-divider">
                     <div class="divider-arrow" id="divider-arrow">⟷</div>
                 </div>
 
-                <!-- Ciphertext panel -->
                 <div class="panel" id="panel-cipher">
                     <div class="panel-header">
                         <span class="panel-title">CIPHERTEXT</span>
@@ -168,7 +171,6 @@
                 </div>
             </div>
 
-            <!-- Status bar -->
             <div class="status-bar" id="status-bar">
                 <span id="status-text">Load or generate keys to begin.</span>
             </div>

@@ -268,11 +268,11 @@ management logic remains in the existing layers.
 
 #### Key panel UX
 
-- [ ] **Purge button positioning** — move "Purge Session Keys" to immediately
+- [x] **Purge button positioning** — move "Purge Session Keys" to immediately
       below the key status / key info area, not below the generate and upload
       sections. The purge action belongs with the loaded-key display, not buried
       under unrelated controls.
-- [ ] **Hide generate and upload when keys are loaded** — collapse the "Generate
+- [x] **Hide generate and upload when keys are loaded** — collapse the "Generate
       New Keys" and "Upload Existing Keys" sections when a keypair is active.
       The user must purge before generating or uploading new keys. This prevents
       accidental key replacement mid-session and clarifies the intended workflow.
@@ -303,3 +303,54 @@ management logic remains in the existing layers.
       shared with senders or stored for reference.
       These are essential for any workflow where the user generates keys in one
       session and needs to decrypt messages received later.
+
+#### Database management
+
+- [ ] **Reset database from UI** — add a "Reset Database" option accessible
+      from the main UI (e.g. a small settings or admin link in the header or
+      footer). Clicking it shows a confirmation dialog: *"This will permanently
+      delete your Pokémon database. This cannot be undone. Are you sure?"*
+      On confirmation, the server deletes `data/pokemon.db` and redirects to
+      `/setup` so the user can re-seed with different options.
+      - Implementation note: delete the file directly from Flask — do NOT invoke
+        `seed_db.py --clean` since that blocks on an `input()` confirmation
+        prompt that cannot be answered from a subprocess.
+      - New route: `DELETE /api/setup/database`
+
+#### Key upload error handling
+
+- [ ] **Smart file validation on upload** — when the user uploads a key file,
+      validate its structure before accepting it and surface specific, actionable
+      errors rather than generic JSON parse failures.
+      - If the user uploads `public.json` to the private key slot: detect that
+        the file contains `bundle_p`/`bundle_q` fields (public key structure)
+        and offer: *"This looks like a public key file. Would you like to load
+        it as your public key instead?"*
+      - If the user uploads `private.key` to the public key slot: detect that
+        the file contains `n`/`d` fields (private key structure) and offer:
+        *"This looks like a private key file. Would you like to load it as
+        your private key instead?"*
+      - If the file is valid JSON but neither structure: *"This file doesn't
+        look like a Pokédex RSA key file. Expected either a private key
+        (containing n and d) or a public key (containing bundle_p and bundle_q)."*
+      - If the file is not valid JSON at all: *"Could not read this file as a
+        key — it may be corrupted or the wrong file type."*
+
+#### Decryption error messaging
+
+- [ ] **Key mismatch on decrypt** — when decryption fails with a cryptic error
+      like `int too big to convert`, attempt to diagnose the cause before
+      surfacing it to the user. Specifically:
+      - Extract the `public_bundle` from the encrypted message
+      - Resolve its `bundle_p` and `bundle_q` Pokemon against the database
+      - Compare against the Pokemon resolved from the session's current public key
+      - If the Pokemon differ: surface a clear message — *"This message was
+        encrypted with different keys (Pokémon A × Pokémon B). Load the
+        matching keys and try again."*
+      - If the Pokemon match but decryption still fails: surface a generic
+        *"Decryption failed — the message may be corrupted."*
+      - If the bundle can't be resolved at all: *"The message's public key
+        cannot be resolved with the current database."*
+      - Implementation note: this check belongs in the Flask `/api/decrypt`
+        route as a pre-flight before passing to the controller, since it needs
+        access to both the session keys and the encrypted message bundle.

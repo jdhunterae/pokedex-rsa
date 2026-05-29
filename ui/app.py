@@ -246,49 +246,141 @@ def api_setup_progress():
 # Session / key management API
 # ---------------------------------------------------------------------------
 
+def _slot_status() -> dict:
+    """Return the current state of both key slots."""
+    has_private = _private_key_path() is not None
+    has_public = _public_key_path() is not None
+    both = has_private and has_public
+
+    if both:
+        state = "both"
+    elif has_private or has_public:
+        state = "partial"
+    else:
+        state = "empty"
+
+    return {
+        "state":       state,
+        "has_private": has_private,
+        "has_public":  has_public,
+        "keys_loaded": both,
+    }
+
+
 @app.route("/api/session/status")
 def api_session_status():
-    return jsonify({
-        "keys_loaded": _keys_loaded(),
-        "has_private": _private_key_path() is not None,
-        "has_public":  _public_key_path() is not None,
-    })
+    return jsonify(_slot_status())
 
 
 @app.route("/api/session/keys", methods=["POST"])
 def api_session_upload_keys():
-    """Accept uploaded private.key and/or public.json files."""
+    """
+    Accept a single key file upload (private_key or public_key).
+    Validates structure and surfaces specific errors for misrouted files.
+    Returns updated slot status after saving.
+    """
     key_dir = _ensure_session_dir()
-    saved = []
 
+    # ── Private key upload ──────────────────────────────────────────────
     if "private_key" in request.files:
         f = request.files["private_key"]
-        # Validate it looks like a private key
         try:
-            data = json.load(f)
-            if "n" not in data or "d" not in data:
-                return _err("private_key file must contain 'n' and 'd' fields.")
-            with open(os.path.join(key_dir, "private.key"), "w") as out:
-                json.dump(data, out)
-            saved.append("private_key")
-        except Exception as e:
-            return _err(f"Could not parse private key: {e}")
+            raw = f.read().decode("utf-8")
+            data = json.loads(raw)
+        except Exception:
+            return _err("Could not read this file — it may be corrupted or the wrong file type.")
 
+        # Detect misrouted public key
+        if "bundle_p" in data or "bundle_q" in data:
+            return _err(
+                "This looks like a public key file (public.json). "
+                "Please upload it using the public.json slot instead.",
+                409
+            )
+
+        if "n" not in data or "d" not in data:
+            return _err(
+                "This file doesn't look like a Pokédex RSA private key. "
+                "Expected a file containing 'n' and 'd' fields."
+            )
+
+        try:
+            # Validate the values are integers
+            PrivateKey(n=int(data["n"]), d=int(data["d"]))
+        except Exception:
+            return _err("Private key values could not be parsed as integers.")
+
+        with open(os.path.join(key_dir, "private.key"), "w") as out:
+            out.write(raw)
+
+        return jsonify({"saved": "private_key", **_slot_status()})
+
+    # ── Public key upload ───────────────────────────────────────────────
     if "public_key" in request.files:
         f = request.files["public_key"]
         try:
             raw = f.read().decode("utf-8")
+            data = json.loads(raw)
+        except Exception:
+            return _err("Could not read this file — it may be corrupted or the wrong file type.")
+
+        # Detect misrouted private key
+        if "d" in data and "n" in data and "bundle_p" not in data:
+            return _err(
+                "This looks like a private key file (private.key). "
+                "Please upload it using the private.key slot instead.",
+                409
+            )
+
+        try:
             bundle = PokedexPublicBundle.from_json(raw)
-            with open(os.path.join(key_dir, "public.json"), "w") as out:
-                out.write(bundle.to_json())
-            saved.append("public_key")
-        except Exception as e:
-            return _err(f"Could not parse public key: {e}")
+        except Exception:
+            return _err(
+                "This file doesn't look like a Pokédex RSA public key. "
+                "Expected a file containing 'bundle_p', 'bundle_q', and 'e' fields."
+            )
 
-    if not saved:
-        return _err("No valid key files provided.")
+        with open(os.path.join(key_dir, "public.json"), "w") as out:
+            out.write(bundle.to_json())
 
-    return jsonify({"saved": saved, "keys_loaded": _keys_loaded()})
+        return jsonify({"saved": "public_key", **_slot_status()})
+
+    return _err("No key file provided.")
+
+
+@app.route("/api/session/validate", methods=["POST"])
+def api_session_validate():
+    """
+    Validate that the currently uploaded private and public keys match.
+    Should be called after both slots are filled.
+
+    Returns:
+      { status: "valid"|"unresolvable"|"mismatch"|"incomplete",
+        error: str|null,
+        pokemon_p: str|null,
+        pokemon_q: str|null,
+        modulus_bits: int|null }
+    """
+    private_key = _load_private_key()
+    bundle = _load_public_bundle()
+
+    if not private_key or not bundle:
+        return jsonify({"status": "incomplete", "error": "Both key files must be uploaded first."})
+
+    try:
+        controller = _controller()
+        status, error, pokemon_p, pokemon_q = controller.validate_keypair(
+            bundle, private_key)
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)})
+
+    return jsonify({
+        "status":       status,
+        "error":        error,
+        "pokemon_p":    str(pokemon_p) if pokemon_p else None,
+        "pokemon_q":    str(pokemon_q) if pokemon_q else None,
+        "modulus_bits": private_key.n.bit_length() if status == "valid" else None,
+    })
 
 
 @app.route("/api/session/keygen", methods=["POST"])

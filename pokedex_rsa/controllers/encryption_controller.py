@@ -481,6 +481,64 @@ class EncryptionController:
         except ResolutionError as e:
             return False, str(e), None
 
+    def validate_keypair(
+        self,
+        public_bundle: "PokedexPublicBundle",
+        private_key: "PrivateKey",
+    ) -> tuple[str, Optional[str], Optional["Pokemon"], Optional["Pokemon"]]:
+        """
+        Validate that a public bundle and private key form a matching pair.
+
+        Process:
+          1. Resolve both Pokemon from the public bundle
+          2. Derive primes from their names
+          3. Compute n = p × q
+          4. Compare with the n stored in the private key
+
+        Returns
+        -------
+        (status, error_message, pokemon_p, pokemon_q)
+
+        status values:
+          'valid'        — keys match; pokemon_p and pokemon_q are populated
+          'unresolvable' — one or both Pokemon cannot be resolved from the DB;
+                           the public key may reference Pokemon not in the
+                           current database (corrupted or needs re-seed)
+          'mismatch'     — both Pokemon resolved but n values don't match;
+                           the private and public keys are not a pair
+        """
+        # Step 1: Resolve Pokemon from the public bundle
+        try:
+            pokemon_p = self._resolve_bundle(
+                public_bundle.bundle_p, label="bundle_p")
+            pokemon_q = self._resolve_bundle(
+                public_bundle.bundle_q, label="bundle_q")
+        except ResolutionError:
+            return (
+                "unresolvable",
+                "This public key cannot be validated with the current database. "
+                "The data may be corrupted, or you may need to re-seed your database.",
+                None,
+                None,
+            )
+
+        # Step 2: Derive n from the resolved Pokemon
+        p = derive_prime(pokemon_p.name)
+        q = derive_prime(pokemon_q.name)
+        expected_n = p * q
+
+        # Step 3: Compare with the private key's n
+        if expected_n != private_key.n:
+            return (
+                "mismatch",
+                "Key mismatch — these keys don't work together. "
+                "Purge and re-upload both files.",
+                None,
+                None,
+            )
+
+        return ("valid", None, pokemon_p, pokemon_q)
+
     def count_candidates(self, partial_bundle: Optional[dict] = None) -> int:
         """
         Return the number of Pokemon matching a partial bundle.

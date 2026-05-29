@@ -224,6 +224,11 @@ body {
     background: var(--border-light);
 }
 
+.key-status-indicator.partial {
+    background: var(--yellow);
+    box-shadow: 0 0 6px var(--yellow);
+}
+
 .key-status-indicator.has-keys {
     background: var(--green);
     box-shadow: 0 0 6px var(--green);
@@ -357,6 +362,122 @@ body {
 
 .upload-label input[type="file"] {
     display: none;
+}
+
+/* ── Key message (partial / mismatch / unresolvable states) */
+.key-message {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.6;
+}
+
+.key-message.warning {
+    border-color: var(--yellow);
+    color: var(--yellow);
+}
+
+.key-message.error {
+    border-color: var(--red-dim);
+    color: var(--red);
+}
+
+/* ── Key divider */
+.key-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+}
+
+/* ── Generate hint */
+.generate-hint {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--yellow);
+    margin-top: 6px;
+    line-height: 1.5;
+}
+
+/* ── Upload slots — styled to match original aesthetic */
+.upload-slots {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.upload-slot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-input);
+    border: 1px dashed var(--border-light);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-dim);
+    transition: all var(--transition);
+}
+
+.upload-slot:hover {
+    border-color: var(--red-dim);
+    color: var(--text);
+}
+
+.upload-slot.filled {
+    border-color: var(--green);
+    border-style: solid;
+}
+
+.upload-slot.filled:hover {
+    border-color: var(--green);
+}
+
+/* Hide the native file picker — the whole label is the click target */
+.upload-slot input[type="file"] {
+    display: none;
+}
+
+.slot-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.slot-dot.empty {
+    background: var(--border-light);
+}
+
+.slot-dot.loaded {
+    background: var(--green);
+    box-shadow: 0 0 4px var(--green);
+}
+
+.slot-name {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    flex: 1;
+}
+
+.slot-status {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+.upload-slot.filled .slot-status {
+    color: var(--green);
+}
+
+/* ── Partial key status indicator colour */
+.key-status-indicator.partial {
+    background: var(--yellow);
+    box-shadow: 0 0 6px var(--yellow);
 }
 
 /* ============================================================
