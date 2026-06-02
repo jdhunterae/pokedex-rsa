@@ -166,11 +166,21 @@
 
             <div class="panels-row">
                 <div class="panel" id="panel-plain">
+                    <div class="panel-drop-overlay hidden" id="drop-overlay-plain">
+                        <span>Drop .txt file to load</span>
+                    </div>
                     <div class="panel-header">
                         <span class="panel-title">PLAINTEXT</span>
-                        <button class="panel-action hidden" id="export-plain" onclick="exportFile('plain')">
-                            Export .txt
-                        </button>
+                        <div class="panel-header-actions">
+                            <label class="panel-action hidden" id="import-plain-btn" title="Import .txt file">
+                                Import .txt
+                                <input type="file" id="import-plain" accept=".txt,.text"
+                                    onchange="handleFileImport('plain', this)" />
+                            </label>
+                            <button class="panel-action hidden" id="export-plain" onclick="exportFile('plain')">
+                                Export .txt
+                            </button>
+                        </div>
                     </div>
                     <textarea class="panel-textarea" id="textarea-plain"
                         placeholder="Type or paste your plaintext message here…" disabled
@@ -185,14 +195,24 @@
                 </div>
 
                 <div class="panel" id="panel-cipher">
+                    <div class="panel-drop-overlay hidden" id="drop-overlay-cipher">
+                        <span>Drop .json file to load</span>
+                    </div>
                     <div class="panel-header">
                         <span class="panel-title">CIPHERTEXT</span>
-                        <button class="panel-action hidden" id="export-cipher" onclick="exportFile('cipher')">
-                            Export .json
-                        </button>
+                        <div class="panel-header-actions">
+                            <label class="panel-action hidden" id="import-cipher-btn" title="Import .json file">
+                                Import .json
+                                <input type="file" id="import-cipher" accept=".json"
+                                    onchange="handleFileImport('cipher', this)" />
+                            </label>
+                            <button class="panel-action hidden" id="export-cipher" onclick="exportFile('cipher')">
+                                Export .json
+                            </button>
+                        </div>
                     </div>
                     <textarea class="panel-textarea mono" id="textarea-cipher"
-                        placeholder="Paste encrypted JSON here to decrypt…" disabled
+                        placeholder="Paste or drop encrypted JSON here to decrypt…" disabled
                         oninput="onPanelInput('cipher')"></textarea>
                     <div class="panel-footer">
                         <span class="panel-hint" id="hint-cipher"></span>

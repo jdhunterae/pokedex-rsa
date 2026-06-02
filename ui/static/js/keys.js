@@ -653,6 +653,11 @@ function enablePanels(enabled) {
     document.getElementById('direction-label').textContent = enabled
         ? '— type in either panel —'
         : '— awaiting keys —';
+
+    // Show import buttons alongside the panels they serve
+    const showHide = enabled ? 'remove' : 'add';
+    document.getElementById('import-plain-btn')?.classList[showHide]('hidden');
+    document.getElementById('import-cipher-btn')?.classList[showHide]('hidden');
 }
 
 // ---------------------------------------------------------------------------

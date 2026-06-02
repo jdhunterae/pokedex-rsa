@@ -151,7 +151,7 @@ Each phase branch cuts from `develop`, gets merged back into `develop` when comp
 
 #### Decryption error messaging
 
-- [ ] **Key mismatch on decrypt** — pre-flight check in `/api/decrypt` that
+- [x] **Key mismatch on decrypt** — pre-flight check in `/api/decrypt` that
       resolves the message's embedded public bundle Pokemon and compares against
       the session's current keys before attempting decryption; surfaces
       *"This message was encrypted with different keys"* rather than a raw

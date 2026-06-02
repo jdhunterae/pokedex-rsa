@@ -629,7 +629,37 @@ def api_decrypt():
             encrypted = EncryptedMessage.from_json(enc_raw)
         else:
             encrypted = EncryptedMessage.from_json(json.dumps(enc_data))
+    except Exception as e:
+        return _err(f"Could not parse encrypted message: {e}")
+
+    # ── Pre-flight: check the message's embedded public bundle against the
+    # session keys before attempting decryption. This surfaces a clear
+    # "wrong keys" message instead of a cryptic Python exception.
+    session_bundle = _load_public_bundle()
+    if session_bundle:
         controller = _controller()
+        msg_status, msg_error, msg_p, msg_q = controller.validate_keypair(
+            encrypted.public_bundle, private_key
+        )
+        if msg_status == "unresolvable":
+            return _err(
+                "This message's public key cannot be resolved with the current database. "
+                "The database may need to be re-seeded with the same Pokémon that were "
+                "used when this message was encrypted."
+            )
+        if msg_status == "mismatch":
+            # The session keys and message keys don't match.
+            # Don't reveal which Pokémon the message used — just tell the user
+            # to load the correct keys.
+            return _err(
+                "These keys cannot decrypt this message. "
+                "The message was encrypted with a different keypair. "
+                "Load the matching keys and try again."
+            )
+    else:
+        controller = _controller()
+
+    try:
         plaintext = controller.decrypt(encrypted, private_key)
         return jsonify({"plaintext": plaintext})
     except ResolutionError as e:
@@ -637,7 +667,7 @@ def api_decrypt():
     except ValueError as e:
         return _err(str(e))
     except Exception as e:
-        return _err(str(e))
+        return _err("Decryption failed — the message may be corrupted.")
 
 
 # ---------------------------------------------------------------------------

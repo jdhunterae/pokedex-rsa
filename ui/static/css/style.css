@@ -777,6 +777,7 @@ body {
     border-radius: var(--radius-lg);
     overflow: hidden;
     transition: border-color var(--transition);
+    position: relative;
 }
 
 .panel.active {
@@ -883,6 +884,46 @@ body {
 .divider-arrow.decrypt {
     color: var(--green);
     transform: rotate(0deg);
+}
+
+
+/* ── Panel header actions group */
+.panel-header-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+/* Import label — styled same as panel-action button */
+label.panel-action {
+    cursor: pointer;
+}
+
+label.panel-action input[type="file"] {
+    display: none;
+}
+
+/* ── Drag-and-drop overlay */
+.panel-drop-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(78, 204, 163, 0.08);
+    border: 2px dashed var(--green);
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    pointer-events: none;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--green);
+    letter-spacing: 0.06em;
+}
+
+.panel.drag-active {
+    border-color: var(--green);
+    box-shadow: 0 0 20px rgba(78, 204, 163, 0.15);
 }
 
 /* Status bar */
