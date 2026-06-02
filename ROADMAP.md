@@ -146,7 +146,7 @@ Each phase branch cuts from `develop`, gets merged back into `develop` when comp
 
 #### Database management
 
-- [ ] **Reset database from UI** — settings link in header → confirmation dialog
+- [x] **Reset database from UI** — settings link in header → confirmation dialog
       → `DELETE /api/setup/database` → redirect to `/setup`
 
 #### Decryption error messaging

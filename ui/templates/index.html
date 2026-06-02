@@ -21,6 +21,9 @@
         </div>
         <div class="header-right">
             <span class="db-status" id="db-status">● ONLINE</span>
+            <button class="btn-reset-db" onclick="resetDatabase()" title="Delete database and re-seed">
+                Reset DB
+            </button>
         </div>
     </header>
 
@@ -229,6 +232,26 @@
 
     <script src="{{ url_for('static', filename='js/keys.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script>
+        function resetDatabase() {
+            if (!confirm(
+                'This will permanently delete the Pokémon database.\n' +
+                'All seeded data will be lost and cannot be recovered.\n\n' +
+                'Are you sure you want to continue?'
+            )) return;
+
+            fetch('/api/setup/database', { method: 'DELETE' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.deleted) {
+                        window.location.href = '/setup';
+                    } else {
+                        alert('Could not delete database: ' + (data.error || 'unknown error'));
+                    }
+                })
+                .catch(err => alert('Error: ' + err.message));
+        }
+    </script>
 </body>
 
 </html>

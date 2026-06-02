@@ -174,6 +174,27 @@ _seed_job = {"running": False, "log": [],
              "done": False, "error": None, "count": 0}
 
 
+@app.route("/api/setup/database", methods=["DELETE"])
+def api_delete_database():
+    """
+    Delete the Pokemon database file and purge the session.
+    The client should redirect to /setup after receiving a success response.
+    """
+    # Purge session keys first so there are no dangling temp files
+    key_dir = _session_dir()
+    if key_dir and os.path.isdir(key_dir):
+        shutil.rmtree(key_dir, ignore_errors=True)
+    session.pop("key_dir", None)
+
+    if os.path.exists(DB_PATH):
+        try:
+            os.remove(DB_PATH)
+        except OSError as e:
+            return _err(f"Could not delete database: {e}", 500)
+
+    return jsonify({"deleted": True})
+
+
 @app.route("/api/setup/seed", methods=["POST"])
 def api_setup_seed():
     """
