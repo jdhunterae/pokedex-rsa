@@ -221,15 +221,74 @@ Block-based encryption means there is no practical message length limit.
 
 ---
 
-## CLI Usage
+## Web UI
 
-### Installation
+The web UI provides a browser-based interface to the full encryption pipeline. Launch it with:
 
 ```bash
-pip install -e .
+poke-rsa-ui
 ```
 
-Registers `poke-rsa` in your virtual environment.
+### Key management
+
+The key panel on the left side of the interface has four states:
+
+| State | Indicator | Description |
+|---|---|---|
+| Empty | Grey | No keys loaded — generate or upload to begin |
+| Partial | Yellow | One of two key files uploaded |
+| Mismatch | Yellow | Both files uploaded but keys don't form a valid pair |
+| Valid | Green | Both keys loaded, validated, and ready |
+
+**Generating a keypair**
+
+Use the filter dropdowns and search box to narrow the Pokémon pool for each slot (P and Q). All eight metadata fields are available as filters:
+
+| Field | Type |
+|---|---|
+| Primary type | Dropdown |
+| Secondary type | Dropdown (`none` for single-type) |
+| Generation | Dropdown (1–9) |
+| Color | Dropdown |
+| Form | Dropdown (default, alola, galar, hisui, paldea) |
+| BST | Integer |
+| Height (m) | Decimal |
+| Weight (kg) | Decimal |
+
+The live counter next to each filter slot (`8 / 1078`) shows how many Pokémon match the current filters. Type in the search box to find a specific Pokémon by name — clicking a result locks that slot to that Pokémon exactly. The Generate Keypair button is disabled if either pool is empty or if identical filters produce a pool of fewer than 2.
+
+After generating, the key info card shows which Pokémon were selected and the modulus size. Use the `↓ private.key` and `↓ public.json` buttons to download and preserve your keys for future sessions.
+
+**Uploading existing keys**
+
+Drag a file onto the `private.key` or `public.json` slot, or click a slot to browse. The app detects misrouted files (e.g. uploading `public.json` to the private key slot) and surfaces a specific error. When both slots are filled, the app automatically validates the pair and confirms they work together before enabling the encryption panels.
+
+**Purging keys**
+
+The Purge Session Keys button clears both key files from the session. The generate and upload sections reappear. Individual slot clearing is intentionally not supported — if keys don't match, purge both and start over.
+
+---
+
+### Encrypting and decrypting
+
+The two-panel layout works like a translate interface:
+
+- Type or paste plaintext in the left panel → ciphertext appears on the right after 800ms
+- Paste or drop an `encrypted.json` file into the right panel → plaintext appears on the left
+
+Both panels accept drag-and-drop (`.txt` for plaintext, `.json` for ciphertext) as well as click-to-import via the **Import** button in each panel header. The **Export** buttons download the current panel content as a file.
+
+If you try to decrypt a message that was encrypted with different keys, the app detects the mismatch before attempting decryption and surfaces a clear error rather than a cryptic server exception.
+
+---
+
+### Database management
+
+The **Reset DB** button in the top-right header deletes the local database after confirmation and redirects to the setup page to re-seed. Use this when switching between full and starter-only databases, or to reset to a clean state.
+
+---
+
+## CLI Usage
 
 ### Commands
 
@@ -243,7 +302,7 @@ poke-rsa count --bundle '{"type_primary":"fire"}'
 # 64 Pokemon match {"type_primary": "fire"} (out of 1025 total)
 ```
 
-#### `validate` — confirm a bundle is unique
+#### `validate` — confirm a bundle resolves to exactly one Pokémon
 
 ```bash
 poke-rsa validate --bundle '{"type_primary":"grass","base_stat_total":308}'
@@ -252,31 +311,54 @@ poke-rsa validate --bundle '{"type_primary":"grass","base_stat_total":308}'
 
 #### `keygen` — generate a keypair
 
-Bundle flags are optional. Three modes per slot:
+All filter flags are optional and can be combined freely. `--bundle-p/q` takes precedence over individual filter flags when both are provided.
+
+**Modes (applied independently to P and Q):**
 
 | Mode | Description |
 |---|---|
-| No bundle | Fully random from entire database |
-| Partial bundle | Random from matching pool |
-| Exact bundle | Deterministic — bundle must resolve to one Pokémon |
+| No flags | Fully random from entire database |
+| Filter flags | Random from matching pool |
+| `--bundle-p/q` | Exact JSON bundle |
+
+**Individual filter flags:**
+
+| Flag | Type | Description |
+|---|---|---|
+| `--type-primary-p/q` | text | Primary type (e.g. `fire`, `water`) |
+| `--type-secondary-p/q` | text | Secondary type; use `none` for single-type |
+| `--generation-p/q` | integer | Generation (1–9) |
+| `--color-p/q` | text | Pokédex color |
+| `--form-p/q` | text | Form (`default`, `alola`, `galar`, `hisui`, `paldea`) |
+| `--bst-p/q` | integer | Base stat total |
+| `--height-p/q` | float | Height in metres |
+| `--weight-p/q` | float | Weight in kg |
 
 ```bash
-poke-rsa keygen                            # fully random, writes private.key + public.json
-poke-rsa keygen --fileless                 # fully random, prints to terminal
-poke-rsa keygen --bundle-p '{"type_primary":"water"}' --fileless
+poke-rsa keygen                                      # fully random
+poke-rsa keygen --fileless                           # fully random, terminal output
+poke-rsa keygen --type-primary-p fire --generation-p 1
+poke-rsa keygen --bundle-p '{"type_primary":"grass","base_stat_total":308}'
+poke-rsa keygen --type-primary-p water --type-primary-q fire --fileless
 ```
 
 #### `encrypt` — encrypt a message
 
 ```bash
-poke-rsa encrypt --message "Hello, Trainer!"           # reads public.json, writes encrypted.json
+poke-rsa encrypt --message "Hello, Trainer!"
+# reads public.json, writes encrypted.json
+
 poke-rsa encrypt --fileless --message "Hello!" --public-key '<paste public bundle>'
 ```
 
 #### `decrypt` — decrypt a message
 
+The CLI performs a pre-flight key validation before attempting decryption, surfacing a clear error if the message was encrypted with different keys.
+
 ```bash
-poke-rsa decrypt                           # reads private.key + encrypted.json, writes plaintext.txt
+poke-rsa decrypt
+# reads private.key + encrypted.json, writes plaintext.txt
+
 poke-rsa decrypt --fileless --private-key '<paste>' --encrypted '<paste>'
 ```
 

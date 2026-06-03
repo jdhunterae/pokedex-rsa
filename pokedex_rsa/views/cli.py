@@ -235,13 +235,13 @@ def keygen(bundle_p, bundle_q,
            private_key_out, public_key_out, verbose, fileless):
     """Generate a keypair. All filter flags are optional.
 
-    \\b
+    \b
     Modes (applied independently to P and Q):
       No flags         fully random from entire DB
       Filter flags     random from matching pool
       --bundle-p/q     exact JSON bundle (overrides individual filter flags)
 
-    \\b
+    \b
     Examples:
       poke-rsa keygen --fileless
       poke-rsa keygen --type-primary-p fire --generation-p 1
