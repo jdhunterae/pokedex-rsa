@@ -705,3 +705,154 @@ class TestCountCommand:
         result = invoke(runner, ["count", "--bundle",
                         '{"not_a_field": "value"}'])
         assert_error(result, "invalid")
+
+
+# ---------------------------------------------------------------------------
+# decrypt — pre-flight key mismatch
+# ---------------------------------------------------------------------------
+
+class TestDecryptPreFlight:
+
+    @pytest.fixture
+    def keypair_and_encrypted(self, runner, patched_controller):
+        """Generate keys and encrypt a message, return (private_key, encrypted_json)."""
+        kg = invoke(runner, [
+            "keygen", "--fileless",
+            "--bundle-p", BP_BULBASAUR,
+            "--bundle-q", BP_SQUIRTLE,
+        ])
+        private_key = next(
+            l.strip() for l in kg.output.splitlines() if l.strip().startswith('{"n"')
+        )
+        public_key = next(
+            l.strip() for l in kg.output.splitlines() if l.strip().startswith('{"bundle_p"')
+        )
+        enc = invoke(runner, [
+            "encrypt", "--fileless",
+            "--message", "Test message",
+            "--public-key", public_key,
+        ])
+        encrypted = next(
+            l.strip() for l in enc.output.splitlines() if l.strip().startswith('{"ciphertext"')
+        )
+        return private_key, encrypted
+
+    def test_correct_keys_decrypts_successfully(self, runner, patched_controller,
+                                                keypair_and_encrypted):
+        private_key, encrypted = keypair_and_encrypted
+        result = invoke(runner, [
+            "decrypt", "--fileless",
+            "--private-key", private_key,
+            "--encrypted", encrypted,
+        ])
+        assert_success(result, "Test message")
+
+    def test_wrong_private_key_gives_mismatch_error(self, runner, patched_controller,
+                                                    keypair_and_encrypted):
+        _, encrypted = keypair_and_encrypted
+        # Generate a different keypair to get a mismatched private key
+        kg2 = invoke(runner, [
+            "keygen", "--fileless",
+            "--bundle-p", BP_CYNDAQUIL,
+            "--bundle-q", BP_MUDKIP,
+        ])
+        wrong_private = next(
+            l.strip() for l in kg2.output.splitlines() if l.strip().startswith('{"n"')
+        )
+        result = invoke(runner, [
+            "decrypt", "--fileless",
+            "--private-key", wrong_private,
+            "--encrypted", encrypted,
+        ])
+        assert_error(result, "different keypair")
+
+    def test_mismatch_error_does_not_reveal_pokemon(self, runner, patched_controller,
+                                                    keypair_and_encrypted):
+        _, encrypted = keypair_and_encrypted
+        kg2 = invoke(runner, [
+            "keygen", "--fileless",
+            "--bundle-p", BP_CYNDAQUIL,
+            "--bundle-q", BP_MUDKIP,
+        ])
+        wrong_private = next(
+            l.strip() for l in kg2.output.splitlines() if l.strip().startswith('{"n"')
+        )
+        result = invoke(runner, [
+            "decrypt", "--fileless",
+            "--private-key", wrong_private,
+            "--encrypted", encrypted,
+        ])
+        # Error should not name which Pokemon were used
+        combined = result.output.lower()
+        assert "bulbasaur" not in combined
+        assert "squirtle" not in combined
+
+
+# ---------------------------------------------------------------------------
+# keygen — individual filter flags
+# ---------------------------------------------------------------------------
+
+class TestKeygenFilterFlags:
+
+    def test_type_primary_filter(self, runner, patched_controller):
+        result = invoke(runner, [
+            "keygen", "--fileless",
+            "--type-primary-p", "grass",
+            "--bundle-q", BP_SQUIRTLE,
+        ])
+        assert_success(result, "Selected")
+        # Pokemon P must be grass type
+        assert "bulbasaur" in result.output.lower()
+
+    def test_generation_filter(self, runner, patched_controller):
+        result = invoke(runner, [
+            "keygen", "--fileless",
+            "--generation-p", "3",
+            "--bundle-q", BP_BULBASAUR,
+        ])
+        assert_success(result, "Selected")
+        # Generation 3 in test DB = mudkip
+        assert "mudkip" in result.output.lower()
+
+    def test_multiple_filters_narrow_pool(self, runner, patched_controller):
+        result = invoke(runner, [
+            "keygen", "--fileless",
+            "--type-primary-p", "fire",
+            "--type-secondary-p", "ghost",
+            "--bundle-q", BP_BULBASAUR,
+        ])
+        assert_success(result, "Selected")
+        # fire/ghost in test DB = typhlosion-hisui only
+        assert "hisui" in result.output.lower()
+
+    def test_bundle_takes_precedence_over_filter_flags(self, runner, patched_controller):
+        # --bundle-p overrides --type-primary-p
+        result = invoke(runner, [
+            "keygen", "--fileless",
+            "--bundle-p", BP_BULBASAUR,       # resolves to bulbasaur
+            "--type-primary-p", "fire",        # should be ignored
+            "--bundle-q", BP_SQUIRTLE,
+        ])
+        assert_success(result, "Selected")
+        assert "bulbasaur" in result.output.lower()
+
+    def test_type_secondary_none_filter(self, runner, patched_controller):
+        # 'none' should filter for single-type Pokemon
+        result = invoke(runner, [
+            "keygen", "--fileless",
+            "--type-primary-p", "fire",
+            "--type-secondary-p", "none",
+            "--generation-p", "1",
+            "--bundle-q", BP_MUDKIP,
+        ])
+        assert_success(result, "Selected")
+        # fire/none/gen1 = charmander only
+        assert "charmander" in result.output.lower()
+
+    def test_no_match_filter_fails(self, runner, patched_controller):
+        result = invoke(runner, [
+            "keygen", "--fileless",
+            "--type-primary-p", "dragon",  # no dragon in test DB
+            "--bundle-q", BP_SQUIRTLE,
+        ])
+        assert result.exit_code != 0

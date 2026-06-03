@@ -156,6 +156,34 @@ def cli():
     """
 
 
+def _build_filter_bundle(type_primary, type_secondary, generation, color,
+                         form, bst, height, weight):
+    """
+    Build a metadata filter bundle from individual flag values.
+    Returns None if no flags were provided (fully random selection).
+    type_secondary of 'none' is treated as NULL (single-type filter).
+    """
+    bundle = {}
+    if type_primary:
+        bundle["type_primary"] = type_primary.lower()
+    if type_secondary:
+        bundle["type_secondary"] = None if type_secondary.lower(
+        ) == "none" else type_secondary.lower()
+    if generation is not None:
+        bundle["generation"] = generation
+    if color:
+        bundle["color"] = color.lower()
+    if form:
+        bundle["form"] = form.lower()
+    if bst is not None:
+        bundle["base_stat_total"] = bst
+    if height is not None:
+        bundle["height"] = height
+    if weight is not None:
+        bundle["weight"] = weight
+    return bundle if bundle else None
+
+
 # ---------------------------------------------------------------------------
 # keygen
 # ---------------------------------------------------------------------------
@@ -163,15 +191,28 @@ def cli():
 @cli.command()
 @click.option(
     "--bundle-p", default=None, required=False,
-    help='JSON metadata bundle for the first Pokemon (prime p). Exact match resolves to one Pokemon. Partial match picks randomly from the pool. Omit for fully random selection. e.g. \'{"type_primary":"fire","generation":1}\''
+    help='JSON bundle for Pokemon P. Exact: one match. Partial: random from pool. Omit for random.'
 )
 @click.option(
     "--bundle-q", default=None, required=False,
-    help=(
-        "JSON metadata bundle for the second Pokemon (prime q). "
-        "Same rules as --bundle-p. Omit for fully random selection."
-    )
+    help='JSON bundle for Pokemon Q. Same rules as --bundle-p.'
 )
+@click.option("--type-primary-p",   default=None, help="Filter P: primary type (e.g. fire, water).")
+@click.option("--type-secondary-p", default=None, help="Filter P: secondary type. Use none for single-type.")
+@click.option("--generation-p",     default=None, type=int, help="Filter P: generation (1-9).")
+@click.option("--color-p",          default=None, help="Filter P: Pokedex color.")
+@click.option("--form-p",           default=None, help="Filter P: form (default, alola, galar, hisui, paldea).")
+@click.option("--bst-p",            default=None, type=int, help="Filter P: base stat total.")
+@click.option("--height-p",         default=None, type=float, help="Filter P: height in metres.")
+@click.option("--weight-p",         default=None, type=float, help="Filter P: weight in kg.")
+@click.option("--type-primary-q",   default=None, help="Filter Q: primary type.")
+@click.option("--type-secondary-q", default=None, help="Filter Q: secondary type. Use none for single-type.")
+@click.option("--generation-q",     default=None, type=int, help="Filter Q: generation (1-9).")
+@click.option("--color-q",          default=None, help="Filter Q: Pokedex color.")
+@click.option("--form-q",           default=None, help="Filter Q: form.")
+@click.option("--bst-q",            default=None, type=int, help="Filter Q: base stat total.")
+@click.option("--height-q",         default=None, type=float, help="Filter Q: height in metres.")
+@click.option("--weight-q",         default=None, type=float, help="Filter Q: weight in kg.")
 @click.option(
     "--private-key-out", default="private.key", show_default=True,
     help="Output path for the private key file."
@@ -188,29 +229,37 @@ def cli():
     "--fileless", is_flag=True,
     help="Print keys to terminal only. No files written."
 )
-def keygen(bundle_p, bundle_q, private_key_out, public_key_out, verbose, fileless):
-    """Generate a keypair. Bundles are optional.
+def keygen(bundle_p, bundle_q,
+           type_primary_p, type_secondary_p, generation_p, color_p, form_p, bst_p, height_p, weight_p,
+           type_primary_q, type_secondary_q, generation_q, color_q, form_q, bst_q, height_q, weight_q,
+           private_key_out, public_key_out, verbose, fileless):
+    """Generate a keypair. All filter flags are optional.
 
-    \b
-    Modes:
-      Omit both bundles       fully random selection from entire DB
-      Partial bundle          random from matching pool
-      Exact unique bundle     deterministic selection (original behavior)
+    \\b
+    Modes (applied independently to P and Q):
+      No flags         fully random from entire DB
+      Filter flags     random from matching pool
+      --bundle-p/q     exact JSON bundle (overrides individual filter flags)
 
-    \b
+    \\b
     Examples:
       poke-rsa keygen --fileless
-      poke-rsa keygen --bundle-p '{"type_primary":"fire"}'
-      poke-rsa keygen --bundle-p '{"type_primary":"grass"}' \\
-                      --bundle-q '{"type_primary":"fire","generation":1}'
+      poke-rsa keygen --type-primary-p fire --generation-p 1
+      poke-rsa keygen --bundle-p '{"type_primary":"grass","base_stat_total":308}'
     """
     _check_fileless_verbose(fileless, verbose)
 
-    bp = _parse_bundle(bundle_p, "--bundle-p") if bundle_p else None
-    bq = _parse_bundle(bundle_q, "--bundle-q") if bundle_q else None
+    # Build bundles -- explicit --bundle-p/q takes precedence over individual flags
+    bp = _parse_bundle(bundle_p, "--bundle-p") if bundle_p else _build_filter_bundle(
+        type_primary_p, type_secondary_p, generation_p, color_p, form_p, bst_p, height_p, weight_p
+    )
+    bq = _parse_bundle(bundle_q, "--bundle-q") if bundle_q else _build_filter_bundle(
+        type_primary_q, type_secondary_q, generation_q, color_q, form_q, bst_q, height_q, weight_q
+    )
 
     p_desc = f"filter {bp}" if bp else "random"
     q_desc = f"filter {bq}" if bq else "random"
+    click.echo(f"\nGenerating keypair (p: {p_desc} / q: {q_desc})...")
     click.echo(f"\nGenerating keypair (p: {p_desc} / q: {q_desc})...")
 
     try:
@@ -395,15 +444,35 @@ def decrypt(private_key, private_key_file, encrypted, encrypted_file, out, verbo
     except (json.JSONDecodeError, KeyError) as e:
         _err(f"Could not parse encrypted message: {e}")
 
+    # ── Pre-flight: validate keys match the message before attempting decryption
+    click.echo("\nValidating keys against message...")
+    controller = _controller()
+    status, error, _, _ = controller.validate_keypair(
+        encrypted_msg.public_bundle, private_key_obj
+    )
+    if status == "unresolvable":
+        _err(
+            "This message's public key cannot be resolved with the current database.\n"
+            "  The database may need to be re-seeded with the same Pokémon that were\n"
+            "  used when this message was encrypted."
+        )
+    if status == "mismatch":
+        _err(
+            "These keys cannot decrypt this message.\n"
+            "  The message was encrypted with a different keypair.\n"
+            "  Use the correct private.key for this message."
+        )
+
     click.echo("\nDecrypting message...")
 
     try:
-        controller = _controller()
         plaintext = controller.decrypt(encrypted_msg, private_key_obj)
     except ResolutionError as e:
         _err(str(e))
     except ValueError as e:
         _err(str(e))
+    except Exception:
+        _err("Decryption failed — the message may be corrupted.")
 
     # --- File output ---
     if not fileless:
