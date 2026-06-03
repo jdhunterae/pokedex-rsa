@@ -74,6 +74,12 @@ poke-rsa-ui
 
 Opens at `http://127.0.0.1:5000`. If no database is found, the app redirects to a setup page where you can choose a seeding option and initialise the database without leaving the browser.
 
+![Setup page](docs/screenshots/01-setup-page-empty.png)
+
+Once a seeding option is selected, the progress log streams Pokémon records as they are fetched:
+
+![Seeding in progress](docs/screenshots/02-setup-progress.png)
+
 **GitHub Codespaces:** the Ports tab in VS Code will show port 5000 with a forwarded URL (`https://<codespace-name>-5000.app.github.dev`) once the server starts.
 
 ---
@@ -122,6 +128,8 @@ By default the seeder skips Pokémon already in the database, so partial runs ar
 pokedex-rsa/
 ├── data/
 │   └── pokemon.db              # Local SQLite database (not committed)
+├── docs/
+│   └── screenshots/            # README screenshots
 ├── scripts/
 │   └── seed_db.py              # Database seeder
 ├── pokedex_rsa/
@@ -240,6 +248,8 @@ The key panel on the left side of the interface has four states:
 | Mismatch | Yellow | Both files uploaded but keys don't form a valid pair |
 | Valid | Green | Both keys loaded, validated, and ready |
 
+![No keys loaded](docs/screenshots/03-keygen-empty.png)
+
 **Generating a keypair**
 
 Use the filter dropdowns and search box to narrow the Pokémon pool for each slot (P and Q). All eight metadata fields are available as filters:
@@ -257,11 +267,21 @@ Use the filter dropdowns and search box to narrow the Pokémon pool for each slo
 
 The live counter next to each filter slot (`8 / 1078`) shows how many Pokémon match the current filters. Type in the search box to find a specific Pokémon by name — clicking a result locks that slot to that Pokémon exactly. The Generate Keypair button is disabled if either pool is empty or if identical filters produce a pool of fewer than 2.
 
+![Filter and search UI](docs/screenshots/07-keygen-filter-search.png)
+
 After generating, the key info card shows which Pokémon were selected and the modulus size. Use the `↓ private.key` and `↓ public.json` buttons to download and preserve your keys for future sessions.
+
+![Keys loaded](docs/screenshots/04-keygen-loaded.png)
 
 **Uploading existing keys**
 
 Drag a file onto the `private.key` or `public.json` slot, or click a slot to browse. The app detects misrouted files (e.g. uploading `public.json` to the private key slot) and surfaces a specific error. When both slots are filled, the app automatically validates the pair and confirms they work together before enabling the encryption panels.
+
+**Key mismatch**
+
+If the uploaded keys don't form a valid pair, the panel shows a mismatch warning:
+
+![Key mismatch state](docs/screenshots/08-keygen-mismatch.png)
 
 **Purging keys**
 
@@ -276,6 +296,10 @@ The two-panel layout works like a translate interface:
 - Type or paste plaintext in the left panel → ciphertext appears on the right after 800ms
 - Paste or drop an `encrypted.json` file into the right panel → plaintext appears on the left
 
+![Encrypting a message](docs/screenshots/05-text-encryption.png)
+
+![Decrypting a message](docs/screenshots/06-text-decryption.png)
+
 Both panels accept drag-and-drop (`.txt` for plaintext, `.json` for ciphertext) as well as click-to-import via the **Import** button in each panel header. The **Export** buttons download the current panel content as a file.
 
 If you try to decrypt a message that was encrypted with different keys, the app detects the mismatch before attempting decryption and surfaces a clear error rather than a cryptic server exception.
@@ -284,7 +308,9 @@ If you try to decrypt a message that was encrypted with different keys, the app 
 
 ### Database management
 
-The **Reset DB** button in the top-right header deletes the local database after confirmation and redirects to the setup page to re-seed. Use this when switching between full and starter-only databases, or to reset to a clean state.
+The **Reset DB** button in the top-right header deletes the local database after confirmation and redirects to the setup page to re-seed. If you navigate to the setup page while a database already exists, you'll be offered the choice to return to the app or purge and start over:
+
+![Database already initialized](docs/screenshots/09-setup-database-exists.png)
 
 ---
 
@@ -341,6 +367,8 @@ poke-rsa keygen --type-primary-p fire --generation-p 1
 poke-rsa keygen --bundle-p '{"type_primary":"grass","base_stat_total":308}'
 poke-rsa keygen --type-primary-p water --type-primary-q fire --fileless
 ```
+
+![CLI keygen fileless](docs/screenshots/10-cli-fileless-keygen.png)
 
 #### `encrypt` — encrypt a message
 
