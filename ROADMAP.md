@@ -12,7 +12,9 @@ main                  # stable, working code only
     ├── phase/5-polish
     ├── phase/5.5-core-updates
     ├── phase/6-ui
-    └── phase/7-ui-polish
+    ├── phase/7-ui-polish
+    ├── phase/8-cli-parity
+    └── phase/9-polish
 ```
 
 Each phase branch cuts from `develop`, gets merged back into `develop` when complete.
@@ -168,3 +170,84 @@ Each phase branch cuts from `develop`, gets merged back into `develop` when comp
   as a pip dependency if the UI grows significantly.
 - **P2P messaging** — peer-to-peer layer using the encryption engine; requires
   a user profile system where each user's public bundle is shareable on request.
+
+---
+
+### Phase 8 — CLI Parity
+>
+> Branch: `phase/8-cli-parity` → merge into `develop`
+
+Brings the CLI to feature parity with the web UI. Any behavior, error message,
+or validation that was added or improved in the UI during Phases 6 and 7 should
+be reflected in the CLI so both surfaces behave consistently.
+
+#### Decrypt pre-flight check
+
+- [ ] Add the same key mismatch pre-flight to the `decrypt` command that the
+      UI received in Phase 7 — resolve the Pokemon from the encrypted message's
+      embedded public bundle and compare against the provided private key before
+      attempting decryption
+- [ ] Clear error message: *"This message was encrypted with different keys —
+      load the matching keys and try again."* rather than raw Python exceptions
+- [ ] Update `tests/test_cli.py` to cover the mismatch and unresolvable cases
+
+#### Keygen interactive mode
+
+- [ ] Expose all 8 metadata filter fields as optional flags on `keygen`:
+      `--type-primary`, `--type-secondary`, `--generation`, `--color`,
+      `--form`, `--bst`, `--height`, `--weight`
+- [ ] `--interactive` flag — prompts the user with filters and shows a
+      numbered candidate list to pick from directly, mirroring the UI's
+      search/lock behavior
+- [ ] Update `--help` text and README CLI section to document new flags
+
+#### Error message audit
+
+- [ ] Review all command error paths for any remaining raw Python exceptions
+      surfacing to the user
+- [ ] Confirm `encrypt` / `decrypt` large integer handling is clean in
+      fileless mode (Python handles these natively, but worth verifying
+      the round-trip is consistent with the UI fix)
+
+#### Test updates
+
+- [ ] `tests/test_cli.py` — new tests for decrypt pre-flight (mismatch,
+      unresolvable, correct keys)
+- [ ] `tests/test_cli.py` — new tests for keygen filter flags
+- [ ] `tests/test_cli.py` — new tests for `--interactive` mode if implemented
+
+---
+
+### Phase 9 — Portfolio Polish
+>
+> Branch: `phase/9-polish` → merge into `develop` → merge into `main`
+
+Final presentation pass once all functional work is complete.
+
+#### Web UI
+
+- [ ] `favicon.ico` — add a Pokédex-themed favicon for browser tab
+- [ ] Error state improvements — any remaining rough edges in UI error display
+
+#### Documentation
+
+- [ ] `CONTRIBUTING.md` — setup instructions, branching conventions,
+      test requirements for contributors
+- [ ] Final README pass — ensure every feature is documented, examples
+      are up to date, and the project is legible to someone encountering
+      it cold
+- [ ] ROADMAP updated to reflect fully completed state
+
+#### Code quality
+
+- [ ] Docstring pass across all modules — fill any gaps
+- [ ] Dead code audit — remove anything no longer used
+- [ ] Consistent style pass — naming conventions, comment formatting
+- [ ] Final `python -m pytest tests/ -v` clean run documented in README
+
+#### Demo assets
+
+- [ ] Screenshot set for README — setup page, main UI with keys loaded,
+      encrypt/decrypt in action, filter/search UI
+- [ ] Optional: recorded demo GIF showing the full workflow from
+      key generation to decryption
