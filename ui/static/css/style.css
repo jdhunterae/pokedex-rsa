@@ -974,6 +974,20 @@ label.panel-action input[type="file"] {
     color: var(--yellow);
 }
 
+
+/* ── Already-seeded action buttons (two equal columns) */
+.already-seeded-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.already-seeded-actions .btn-primary,
+.already-seeded-actions .btn-danger {
+    margin: 0;
+}
+
 /* ============================================================
    SETUP PAGE
    ============================================================ */

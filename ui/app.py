@@ -149,6 +149,7 @@ def _err(message: str, status: int = 400):
 
 @app.route("/")
 def index():
+    """Serve the main UI, or redirect to /setup if the database is empty."""
     if _db_count() == 0:
         return redirect(url_for("setup"))
     return render_template("index.html")
@@ -156,7 +157,14 @@ def index():
 
 @app.route("/setup")
 def setup():
-    return render_template("setup.html")
+    """Serve the database initialization page.
+
+    If the database is already seeded, renders a confirmation page asking
+    whether the user wants to purge and re-seed, or return to the main UI.
+    This prevents accidental re-initialization on page refresh.
+    """
+    db_ready = _db_count() > 0
+    return render_template("setup.html", db_already_seeded=db_ready)
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +173,7 @@ def setup():
 
 @app.route("/api/setup/status")
 def api_setup_status():
+    """Return the current database record count and ready status."""
     count = _db_count()
     return jsonify({"count": count, "ready": count > 0})
 
@@ -290,6 +299,7 @@ def _slot_status() -> dict:
 
 @app.route("/api/session/status")
 def api_session_status():
+    """Return the current state of both key slots in the session."""
     return jsonify(_slot_status())
 
 
