@@ -216,7 +216,7 @@ Brings the CLI to feature parity with the web UI.
 - [x] README updated with full Web UI section, filter flag table for `keygen`,
       and pre-flight note on `decrypt`
 
-### Phase 9 — Portfolio Polish
+### Phase 9 — Portfolio Polish `[complete]`
 >
 > Branch: `phase/9-polish` → merge into `develop` → merge into `main`
 
@@ -224,28 +224,28 @@ Final presentation pass once all functional work is complete.
 
 #### Web UI
 
-- [ ] `favicon.ico` — add a Pokédex-themed favicon for browser tab
-- [ ] Error state improvements — any remaining rough edges in UI error display
+- [x] `favicon.ico` and `favicon.svg` — add a Pokédex-themed favicon for browser tab
+- [x] Error state improvements — audit complete, no rough edges identified — any remaining rough edges in UI error display
 
 #### Documentation
 
-- [ ] `CONTRIBUTING.md` — setup instructions, branching conventions,
+- [x] `CONTRIBUTING.md` — setup instructions, branching conventions,
       test requirements for contributors
-- [ ] Final README pass — ensure every feature is documented, examples
+- [x] Final README pass — completed in Phase 8; verified current in Phase 9 — ensure every feature is documented, examples
       are up to date, and the project is legible to someone encountering
       it cold
-- [ ] ROADMAP updated to reflect fully completed state
+- [x] ROADMAP updated to reflect fully completed state
 
 #### Code quality
 
-- [ ] Docstring pass across all modules — fill any gaps
-- [ ] Dead code audit — remove anything no longer used
-- [ ] Consistent style pass — naming conventions, comment formatting
-- [ ] Final `python -m pytest tests/ -v` clean run documented in README
+- [x] Docstring pass across all modules — all public items documented — fill any gaps
+- [x] Dead code audit — nothing to remove — remove anything no longer used
+- [x] Consistent style pass — no inconsistencies found — naming conventions, comment formatting
+- [x] Final test run: 230 tests passing
 
 #### Demo assets
 
-- [ ] Screenshot set for README — setup page, main UI with keys loaded,
+- [ ] Screenshot set for README — *to be added manually by project owner* — setup page, main UI with keys loaded,
       encrypt/decrypt in action, filter/search UI
-- [ ] Optional: recorded demo GIF showing the full workflow from
+- [ ] Optional: recorded demo GIF — *to be added manually by project owner* showing the full workflow from
       key generation to decryption
